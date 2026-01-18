@@ -1,8 +1,7 @@
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
+import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { PrismaService } from './prisma/prisma.service';
+import { AppModule } from './app.module';
 
 async function bootstrap() {
   const context = await NestFactory.createApplicationContext(AppModule);
@@ -19,9 +18,6 @@ async function bootstrap() {
       },
     },
   );
-
-  const prismaService = app.get(PrismaService);
-  await prismaService.enableShutdownHooks();
 
   await app.listen();
   console.log(`Auth Service TCP is running on 0.0.0.0:${tcpPort}`);

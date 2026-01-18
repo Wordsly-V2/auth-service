@@ -1,34 +1,35 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 
 @Injectable()
 export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
-  async onModuleInit() {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    await this.$connect().catch((error: unknown) => {
-      console.error('Error connecting to database', error as Error);
-      throw error;
+  private pool: Pool;
+
+  constructor() {
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
     });
+
+    super({
+      adapter: new PrismaPg(pool),
+    });
+
+    this.pool = pool;
+  }
+
+  async onModuleInit() {
+    await this.$connect();
+    console.log('Prisma connected');
   }
 
   async onModuleDestroy() {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    await this.$disconnect().catch((error: unknown) => {
-      console.error('Error disconnecting from database', error as Error);
-      throw error;
-    });
-  }
-
-  enableShutdownHooks() {
-    this.$on('beforeExit', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-      await this.$disconnect().catch((error: unknown) => {
-        console.error('Error disconnecting from database', error as Error);
-        throw error;
-      });
-    });
+    await this.$disconnect();
+    await this.pool.end(); // 🔥 VERY IMPORTANT
+    console.log('Prisma disconnected');
   }
 }
