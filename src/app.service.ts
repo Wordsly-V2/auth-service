@@ -5,6 +5,6 @@ import { MessagePattern } from '@nestjs/microservices';
 export class AppService {
   @MessagePattern('health')
   getHealth(): string {
-    return 'Auth Service - microservice - Healthy';
+    return 'Auth Service - Healthy';
   }
 }

@@ -2,26 +2,28 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { PrismaService } from './prisma/prisma.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  const configService = app.get(ConfigService);
-
-  const appPort = configService.get<number>('port');
+  const context = await NestFactory.createApplicationContext(AppModule);
+  const configService = context.get(ConfigService);
   const tcpPort = configService.get<number>('tcp.port');
 
-  app.connectMicroservice<MicroserviceOptions>({
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    transport: Number(Transport.TCP),
-    options: {
-      host: '0.0.0.0',
-      port: tcpPort,
+  const app = await NestFactory.createMicroservice<MicroserviceOptions>(
+    AppModule,
+    {
+      transport: Transport.TCP,
+      options: {
+        host: '0.0.0.0',
+        port: tcpPort,
+      },
     },
-  });
+  );
 
-  await app.startAllMicroservices();
-  await app.listen(appPort as number);
-  console.log(`Auth Service is running on port ${appPort}`);
+  const prismaService = app.get(PrismaService);
+  await prismaService.enableShutdownHooks();
+
+  await app.listen();
   console.log(`Auth Service TCP is running on 0.0.0.0:${tcpPort}`);
 }
 
