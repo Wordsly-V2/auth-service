@@ -13,46 +13,52 @@ datasource db {
 }
 
 model UserLogin {
-  id         String   @id @default(uuid())
-  gmail      String   @unique
-  googleId   String?  @unique @map("google_id")
-  facebookId String?  @unique @map("facebook_id")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id             String @id @db.Uuid
+  providerUserId String @unique @map("provider_user_id")
+  provider       String @map("provider")
 
-  users             User[]
-  refreshToken RefreshToken?
+  status String @map("status")
 
-  @@index([gmail])
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  users        User[]
+  refreshToken RefreshToken[]
+
   @@map("user_logins")
 }
 
 model User {
-  id          String    @id @default(uuid())
+  id String @id @db.Uuid
 
-  userLoginId String    @unique @map("user_login_id")
+  userLoginId String    @unique @map("user_login_id") @db.Uuid
   userLogin   UserLogin @relation(fields: [userLoginId], references: [id])
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  displayName String   @map("display_name")
-  pictureUrl  String?  @map("picture_url")
+  gmail       String? @unique
+  displayName String  @map("display_name")
+  pictureUrl  String? @map("picture_url")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([userLoginId])
   @@map("users")
 }
 
 model RefreshToken {
-  id          String    @id @default(uuid())
+  id String @id @default(uuid())
 
-  userLoginId String    @unique @map("user_login_id")
+  userLoginId String    @unique @map("user_login_id") @db.Uuid
   userLogin   UserLogin @relation(fields: [userLoginId], references: [id])
 
-  token       String    @unique
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  jwtId       String    @unique @map("jwt_id")
-  allocatedIp String?   @map("allocated_ip")
+  token       String  @unique
+  jwtId       String  @unique @map("jwt_id")
+  allocatedIp String? @map("allocated_ip")
+
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([userLoginId])
   @@map("refresh_tokens")
