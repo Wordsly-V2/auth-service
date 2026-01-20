@@ -1,16 +1,12 @@
 import { IOAuthLoginResponseDTO, IOAuthUserDTO } from '@/login/DTO/login.DTO';
 import { PrismaService } from '@/prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { UserLogin } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
 
 @Injectable()
 export class LoginService {
-  constructor(
-    private readonly prismaService: PrismaService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly prismaService: PrismaService) {}
 
   async handleOAuthLogin(
     userPayload: IOAuthUserDTO,
@@ -53,13 +49,8 @@ export class LoginService {
         },
       });
 
-      const accessToken = await this.jwtService.signAsync({
-        userLoginId: userLogin.id,
-      });
-
       return {
-        accessToken: accessToken,
-        refreshToken: 'refreshToken',
+        userLoginId: userLogin.id,
       };
     });
   }

@@ -7,6 +7,5 @@ export interface IOAuthUserDTO {
 }
 
 export interface IOAuthLoginResponseDTO {
-  accessToken: string;
-  refreshToken: string;
+  userLoginId: string;
 }
