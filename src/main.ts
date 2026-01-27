@@ -1,7 +1,16 @@
+import { register } from 'tsconfig-paths';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { resolve } from 'path';
 import { AppModule } from './app.module';
+
+register({
+  baseUrl: __dirname,
+  paths: {
+    '@/*': [resolve(__dirname, './*')],
+  },
+});
 
 async function bootstrap() {
   const context = await NestFactory.createApplicationContext(AppModule);
