@@ -1,11 +1,12 @@
 import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
 import configuration from '@/config/configuration';
-import { LoginModule } from '@/login/login.module';
+import { AuthModule } from '@/auth/auth.module';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UsersModule } from './users/users.module';
+import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
 
 @Module({
   imports: [
@@ -13,7 +14,27 @@ import { UsersModule } from './users/users.module';
       isGlobal: true,
       load: [configuration],
     }),
-    LoginModule,
+    JwtModule.registerAsync({
+      global: true,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const secret = config.get('jwt.secret') as string;
+        const expiresIn = config.get(
+          'jwt.expiresIn',
+        ) as JwtSignOptions['expiresIn'];
+
+        return {
+          secret,
+          signOptions: {
+            expiresIn: expiresIn,
+            algorithm: 'RS256',
+            issuer: 'auth-service',
+          },
+        };
+      },
+    }),
+    AuthModule,
     PrismaModule,
     UsersModule,
   ],

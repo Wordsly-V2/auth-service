@@ -61,5 +61,6 @@ model RefreshToken {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([userLoginId])
+  @@index([jwtId])
   @@map("refresh_tokens")
 }

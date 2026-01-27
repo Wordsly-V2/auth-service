@@ -1,12 +1,22 @@
-import { IOAuthLoginResponseDTO, IOAuthUserDTO } from '@/login/DTO/login.DTO';
+import {
+  IOAuthLoginResponseDTO,
+  IOAuthUserDTO,
+  JwtAuthPayload,
+} from '@/auth/DTO/auth.dto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
 import { UserLogin } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
+import { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
-export class LoginService {
-  constructor(private readonly prismaService: PrismaService) {}
+export class AuthService {
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+  ) {}
 
   async handleOAuthLogin(
     userPayload: IOAuthUserDTO,
@@ -49,8 +59,35 @@ export class LoginService {
         },
       });
 
-      return {
+      const accessToken = await this.jwtService.signAsync<JwtAuthPayload>({
         userLoginId: userLogin.id,
+        jti: uuidv7(),
+      });
+
+      const refreshTokenJwtId = uuidv7();
+      const refreshTokenJwt = await this.jwtService.signAsync<JwtAuthPayload>(
+        {
+          userLoginId: userLogin.id,
+          jti: refreshTokenJwtId,
+        },
+        {
+          expiresIn: this.configService.get(
+            'jwt.refreshTokenExpiresIn',
+          ) as JwtSignOptions['expiresIn'],
+        },
+      );
+
+      await transaction.refreshToken.create({
+        data: {
+          userLoginId: userLogin.id,
+          token: refreshTokenJwt,
+          jwtId: refreshTokenJwtId,
+        },
+      });
+
+      return {
+        accessToken,
+        refreshToken: refreshTokenJwt,
       };
     });
   }

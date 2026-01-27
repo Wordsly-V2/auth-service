@@ -1,14 +1,14 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { LoginService } from '@/login/login.service';
+import { AuthService } from '@/auth/auth.service';
 import type {
   IOAuthLoginResponseDTO,
   IOAuthUserDTO,
-} from '@/login/DTO/login.DTO';
+} from '@/auth/DTO/auth.dto';
 
 @Controller('login')
-export class LoginController {
-  constructor(private readonly loginService: LoginService) {}
+export class AuthController {
+  constructor(private readonly loginService: AuthService) {}
 
   @MessagePattern('login_oauth')
   async handleOAuthLogin(
