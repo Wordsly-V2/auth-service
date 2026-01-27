@@ -25,4 +25,4 @@ async function bootstrap() {
   console.log(`Auth Service TCP is running on 0.0.0.0:${tcpPort}`);
 }
 
-bootstrap();
+void bootstrap();
