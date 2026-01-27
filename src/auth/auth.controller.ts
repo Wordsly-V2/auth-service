@@ -38,4 +38,18 @@ export class AuthController {
   ): Promise<IOAuthLoginResponseDTO> {
     return this.loginService.handleRefreshToken({ jwtPayload, userIpAddress });
   }
+
+  @MessagePattern('logout')
+  handleLogout(
+    @Payload()
+    {
+      user,
+      isLoggedOutFromAllDevices,
+    }: {
+      user: JwtAuthPayload;
+      isLoggedOutFromAllDevices: boolean;
+    },
+  ): Promise<{ success: boolean }> {
+    return this.loginService.handleLogout(user, isLoggedOutFromAllDevices);
+  }
 }

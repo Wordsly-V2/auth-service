@@ -5,7 +5,7 @@ import {
 } from '@/auth/DTO/auth.dto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { UserLogin } from '@prisma/client';
+import { Prisma, UserLogin } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -60,7 +60,7 @@ export class AuthService {
         },
       });
 
-      const { accessToken, refreshToken, refreshTokenJti } =
+      const { accessToken, refreshToken, tokenJti } =
         await this.generateJwtToken(userLogin.id);
 
       await transaction.refreshToken.create({
@@ -68,7 +68,7 @@ export class AuthService {
           id: uuidv7(),
           userLoginId: userLogin.id,
           token: refreshToken,
-          jwtId: refreshTokenJti,
+          jwtId: tokenJti,
           allocatedIp: userIpAddress ?? null,
         },
       });
@@ -118,7 +118,7 @@ export class AuthService {
         throw new UnauthorizedException('Unauthorized');
       }
 
-      const { accessToken, refreshToken, refreshTokenJti } =
+      const { accessToken, refreshToken, tokenJti } =
         await this.generateJwtToken(jwtPayload.userLoginId);
 
       await Promise.all([
@@ -132,7 +132,7 @@ export class AuthService {
             id: uuidv7(),
             userLoginId: jwtPayload.userLoginId,
             token: refreshToken,
-            jwtId: refreshTokenJti,
+            jwtId: tokenJti,
             allocatedIp: userIpAddress ?? null,
           },
         }),
@@ -147,21 +147,19 @@ export class AuthService {
 
   async generateJwtToken(userLoginId: string): Promise<{
     accessToken: string;
-    accessTokenJti: string;
     refreshToken: string;
-    refreshTokenJti: string;
+    tokenJti: string;
   }> {
-    const accessTokenJti = uuidv7();
+    const tokenJti = uuidv7();
     const accessToken = await this.jwtService.signAsync<JwtAuthPayload>({
       userLoginId: userLoginId,
-      jti: accessTokenJti,
+      jti: tokenJti,
     });
 
-    const refreshTokenJti = uuidv7();
     const refreshToken = await this.jwtService.signAsync<JwtAuthPayload>(
       {
         userLoginId: userLoginId,
-        jti: refreshTokenJti,
+        jti: tokenJti,
       },
       {
         expiresIn: this.configService.get(
@@ -172,9 +170,32 @@ export class AuthService {
 
     return {
       accessToken,
-      accessTokenJti,
       refreshToken,
-      refreshTokenJti,
+      tokenJti,
     };
+  }
+
+  async handleLogout(
+    user: JwtAuthPayload,
+    isLoggedOutFromAllDevices: boolean = false,
+  ): Promise<{ success: boolean }> {
+    try {
+      if (isLoggedOutFromAllDevices) {
+        await this.prismaService.refreshToken.deleteMany({
+          where: { userLoginId: user.userLoginId },
+        });
+      } else {
+        await this.prismaService.refreshToken.delete({
+          where: { jwtId: user.jti, userLoginId: user.userLoginId },
+        });
+      }
+
+      return { success: true };
+    } catch (error) {
+      if ((error as Prisma.PrismaClientKnownRequestError).code === 'P2025') {
+        return { success: true };
+      }
+      throw error;
+    }
   }
 }
