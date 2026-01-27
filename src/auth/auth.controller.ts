@@ -4,6 +4,7 @@ import { AuthService } from '@/auth/auth.service';
 import type {
   IOAuthLoginResponseDTO,
   IOAuthUserDTO,
+  JwtAuthPayload,
 } from '@/auth/DTO/auth.dto';
 
 @Controller('login')
@@ -12,8 +13,29 @@ export class AuthController {
 
   @MessagePattern('login_oauth')
   async handleOAuthLogin(
-    @Payload() user: IOAuthUserDTO,
+    @Payload()
+    {
+      user,
+      userIpAddress,
+    }: {
+      user: IOAuthUserDTO;
+      userIpAddress: string | undefined;
+    },
   ): Promise<IOAuthLoginResponseDTO> {
-    return this.loginService.handleOAuthLogin(user);
+    return this.loginService.handleOAuthLogin(user, userIpAddress);
+  }
+
+  @MessagePattern('refresh_token')
+  async handleRefreshToken(
+    @Payload()
+    {
+      jwtPayload,
+      userIpAddress,
+    }: {
+      jwtPayload: JwtAuthPayload;
+      userIpAddress: string | undefined;
+    },
+  ): Promise<IOAuthLoginResponseDTO> {
+    return this.loginService.handleRefreshToken({ jwtPayload, userIpAddress });
   }
 }

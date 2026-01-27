@@ -46,16 +46,14 @@ model User {
 }
 
 model RefreshToken {
-  id String @id @default(uuid())
+  id String @id @db.Uuid
 
-  userLoginId String    @unique @map("user_login_id") @db.Uuid
+  userLoginId String    @map("user_login_id") @db.Uuid
   userLogin   UserLogin @relation(fields: [userLoginId], references: [id])
 
   token       String  @unique
   jwtId       String  @unique @map("jwt_id")
   allocatedIp String? @map("allocated_ip")
-
-  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
