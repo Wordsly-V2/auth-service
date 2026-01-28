@@ -1,7 +1,7 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from '@/auth/auth.service';
-import type {
+import {
   IOAuthLoginResponseDTO,
   IOAuthUserDTO,
   JwtAuthPayload,

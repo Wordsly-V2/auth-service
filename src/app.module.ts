@@ -5,7 +5,7 @@ import { AuthModule } from '@/auth/auth.module';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { UsersModule } from './users/users.module';
+import { UsersModule } from '@/users/users.module';
 import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
 
 @Module({
