@@ -2,7 +2,7 @@ import {
   IOAuthLoginResponseDTO,
   IOAuthUserDTO,
   JwtAuthPayload,
-} from '@/auth/DTO/auth.dto';
+} from '@/auth/dto/auth.dto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma, UserLogin } from '@prisma/client';

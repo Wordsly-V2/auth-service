@@ -5,7 +5,7 @@ import {
   IOAuthLoginResponseDTO,
   IOAuthUserDTO,
   JwtAuthPayload,
-} from '@/auth/DTO/auth.dto';
+} from '@/auth/dto/auth.dto';
 
 @Controller('login')
 export class AuthController {

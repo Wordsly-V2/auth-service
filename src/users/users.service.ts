@@ -1,6 +1,6 @@
 import { PrismaService } from '@/prisma/prisma.service';
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { IUser } from '@/users/DTO/users.dto';
+import { IUser } from '@/users/dto/users.dto';
 
 @Injectable()
 export class UsersService {
