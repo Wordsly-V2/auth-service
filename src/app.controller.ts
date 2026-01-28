@@ -1,4 +1,4 @@
-import { Controller } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { MessagePattern } from '@nestjs/microservices';
 import { AppService } from '@/app.service';
 
@@ -8,6 +8,11 @@ export class AppController {
 
   @MessagePattern('health')
   getHealth(): string {
+    return this.appService.getHealth();
+  }
+
+  @Get('health')
+  getHealthHttp(): string {
     return this.appService.getHealth();
   }
 }
