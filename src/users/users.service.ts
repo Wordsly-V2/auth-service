@@ -5,6 +5,7 @@ import { IUser } from '@/users/dto/users.dto';
 @Injectable()
 export class UsersService {
   constructor(private readonly prismaService: PrismaService) {}
+
   async getProfile(userLoginId: string): Promise<IUser> {
     const user = await this.prismaService.user.findUnique({
       where: {

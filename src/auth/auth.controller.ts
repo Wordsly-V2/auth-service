@@ -1,17 +1,19 @@
-import { Controller } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from '@/auth/auth.service';
 import {
   IOAuthLoginResponseDTO,
   IOAuthUserDTO,
   JwtAuthPayload,
 } from '@/auth/dto/auth.dto';
+import { InternalServiceGuard } from '@/guard/internal-service/internal-service.guard';
+import { Controller, Post, UseGuards } from '@nestjs/common';
+import { Payload } from '@nestjs/microservices';
 
-@Controller('login')
+@Controller('auth')
+@UseGuards(InternalServiceGuard)
 export class AuthController {
   constructor(private readonly loginService: AuthService) {}
 
-  @MessagePattern('login_oauth')
+  @Post('login-oauth')
   async handleOAuthLogin(
     @Payload()
     {
@@ -22,10 +24,14 @@ export class AuthController {
       userIpAddress: string | undefined;
     },
   ): Promise<IOAuthLoginResponseDTO> {
-    return this.loginService.handleOAuthLogin(user, userIpAddress);
+    const response = await this.loginService.handleOAuthLogin(
+      user,
+      userIpAddress,
+    );
+    return response;
   }
 
-  @MessagePattern('refresh_token')
+  @Post('refresh-token')
   async handleRefreshToken(
     @Payload()
     {
@@ -39,7 +45,7 @@ export class AuthController {
     return this.loginService.handleRefreshToken({ jwtPayload, userIpAddress });
   }
 
-  @MessagePattern('logout')
+  @Post('logout')
   handleLogout(
     @Payload()
     {

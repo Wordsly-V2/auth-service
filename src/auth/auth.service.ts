@@ -25,58 +25,63 @@ export class AuthService {
     let userLogin: UserLogin | null = null;
 
     return this.prismaService.$transaction(async (transaction) => {
-      userLogin = await transaction.userLogin.findUnique({
-        where: {
-          providerUserId: userPayload.id,
-        },
-      });
-
-      if (!userLogin) {
-        userLogin = await transaction.userLogin.create({
-          data: {
-            id: uuidv7(),
+      try {
+        userLogin = await transaction.userLogin.findUnique({
+          where: {
             providerUserId: userPayload.id,
-            provider: userPayload.provider,
-            status: 'active',
           },
         });
+
+        if (!userLogin) {
+          userLogin = await transaction.userLogin.create({
+            data: {
+              id: uuidv7(),
+              providerUserId: userPayload.id,
+              provider: userPayload.provider,
+              status: 'active',
+            },
+          });
+        }
+
+        await transaction.user.upsert({
+          where: {
+            userLoginId: userLogin.id,
+          },
+          create: {
+            id: uuidv7(),
+            userLoginId: userLogin.id,
+            gmail: userPayload.email,
+            displayName: userPayload.displayName,
+            pictureUrl: userPayload.picture,
+          },
+          update: {
+            gmail: userPayload.email,
+            displayName: userPayload.displayName,
+            pictureUrl: userPayload.picture,
+          },
+        });
+
+        const { accessToken, refreshToken, tokenJti } =
+          await this.generateJwtToken(userLogin.id);
+
+        await transaction.refreshToken.create({
+          data: {
+            id: uuidv7(),
+            userLoginId: userLogin.id,
+            token: refreshToken,
+            jwtId: tokenJti,
+            allocatedIp: userIpAddress ?? null,
+          },
+        });
+
+        return {
+          accessToken,
+          refreshToken,
+        };
+      } catch (error) {
+        console.error(error);
+        throw error;
       }
-
-      await transaction.user.upsert({
-        where: {
-          userLoginId: userLogin.id,
-        },
-        create: {
-          id: uuidv7(),
-          userLoginId: userLogin.id,
-          gmail: userPayload.email,
-          displayName: userPayload.displayName,
-          pictureUrl: userPayload.picture,
-        },
-        update: {
-          gmail: userPayload.email,
-          displayName: userPayload.displayName,
-          pictureUrl: userPayload.picture,
-        },
-      });
-
-      const { accessToken, refreshToken, tokenJti } =
-        await this.generateJwtToken(userLogin.id);
-
-      await transaction.refreshToken.create({
-        data: {
-          id: uuidv7(),
-          userLoginId: userLogin.id,
-          token: refreshToken,
-          jwtId: tokenJti,
-          allocatedIp: userIpAddress ?? null,
-        },
-      });
-
-      return {
-        accessToken,
-        refreshToken,
-      };
     });
   }
 

@@ -1,11 +1,11 @@
 import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
-import configuration from '@/config/configuration';
 import { AuthModule } from '@/auth/auth.module';
+import configuration from '@/config/configuration';
 import { PrismaModule } from '@/prisma/prisma.module';
+import { UsersModule } from '@/users/users.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { UsersModule } from '@/users/users.module';
 import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
 
 @Module({
