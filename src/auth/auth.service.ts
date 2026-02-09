@@ -120,7 +120,9 @@ export class AuthService {
           },
         });
 
-        throw new UnauthorizedException('Unauthorized');
+        throw new UnauthorizedException(
+          'Refresh token allocated IP does not match user IP address',
+        );
       }
 
       const { accessToken, refreshToken, tokenJti } =
