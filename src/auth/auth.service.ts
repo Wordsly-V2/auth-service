@@ -9,6 +9,7 @@ import { Prisma, UserLogin } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import ms from 'ms';
 
 @Injectable()
 export class AuthService {
@@ -71,6 +72,7 @@ export class AuthService {
             token: refreshToken,
             jwtId: tokenJti,
             allocatedIp: userIpAddress ?? null,
+            expiresAt: this.getRefreshTokenExpiresAt(),
           },
         });
 
@@ -141,6 +143,7 @@ export class AuthService {
             token: refreshToken,
             jwtId: tokenJti,
             allocatedIp: userIpAddress ?? null,
+            expiresAt: this.getRefreshTokenExpiresAt(),
           },
         }),
       ]);
@@ -180,6 +183,20 @@ export class AuthService {
       refreshToken,
       tokenJti,
     };
+  }
+
+  private getRefreshTokenExpiresAt(): Date {
+    const expiresIn = this.configService.get(
+      'jwt.refreshTokenExpiresIn',
+    ) as JwtSignOptions['expiresIn'];
+    const ttlMs =
+      typeof expiresIn === 'number'
+        ? expiresIn * 1000
+        : ms(expiresIn as unknown as ms.StringValue);
+    if (ttlMs === undefined || Number.isNaN(ttlMs)) {
+      throw new Error('Invalid jwt.refreshTokenExpiresIn configuration');
+    }
+    return new Date(Date.now() + ttlMs);
   }
 
   async handleLogout(

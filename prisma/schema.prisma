@@ -54,11 +54,13 @@ model RefreshToken {
   token       String  @unique
   jwtId       String  @unique @map("jwt_id")
   allocatedIp String? @map("allocated_ip")
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([userLoginId])
   @@index([jwtId])
+  @@index([expiresAt])
   @@map("refresh_tokens")
 }
