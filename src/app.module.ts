@@ -1,6 +1,7 @@
 import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
 import { AuthModule } from '@/auth/auth.module';
+import { CacheModule } from '@/cache/cache.module';
 import configuration from '@/config/configuration';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { UsersModule } from '@/users/users.module';
@@ -36,6 +37,7 @@ import { ScheduleModule } from '@nestjs/schedule';
         };
       },
     }),
+    CacheModule,
     AuthModule,
     PrismaModule,
     UsersModule,

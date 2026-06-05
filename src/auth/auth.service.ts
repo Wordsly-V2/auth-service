@@ -3,6 +3,7 @@ import {
   IOAuthUserDTO,
   JwtAuthPayload,
 } from '@/auth/dto/auth.dto';
+import { CacheService } from '@/cache/cache.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma, UserLogin } from '@prisma/client';
@@ -17,6 +18,7 @@ export class AuthService {
     private readonly prismaService: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly cacheService: CacheService,
   ) {}
 
   async handleOAuthLogin(
@@ -25,7 +27,7 @@ export class AuthService {
   ): Promise<IOAuthLoginResponseDTO> {
     let userLogin: UserLogin | null = null;
 
-    return this.prismaService.$transaction(async (transaction) => {
+    const result = await this.prismaService.$transaction(async (transaction) => {
       try {
         userLogin = await transaction.userLogin.findUnique({
           where: {
@@ -85,6 +87,10 @@ export class AuthService {
         throw error;
       }
     });
+
+    await this.cacheService.invalidateUser(userLogin!.id);
+
+    return result;
   }
 
   async handleRefreshToken({
