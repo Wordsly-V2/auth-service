@@ -3,6 +3,7 @@ import { AppService } from '@/app.service';
 import { AuthModule } from '@/auth/auth.module';
 import { CacheModule } from '@/cache/cache.module';
 import configuration from '@/config/configuration';
+import { validateEnv } from '@/config/validate-env';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { UsersModule } from '@/users/users.module';
 import { Module } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
+      validate: validateEnv,
     }),
     JwtModule.registerAsync({
       global: true,

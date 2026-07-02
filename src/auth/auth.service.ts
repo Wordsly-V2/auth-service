@@ -5,7 +5,7 @@ import {
 } from '@/auth/dto/auth.dto';
 import { CacheService } from '@/cache/cache.service';
 import { PrismaService } from '@/prisma/prisma.service';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Prisma, UserLogin } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
@@ -14,6 +14,8 @@ import ms from 'ms';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prismaService: PrismaService,
     private readonly jwtService: JwtService,
@@ -83,7 +85,7 @@ export class AuthService {
           refreshToken,
         };
       } catch (error) {
-        console.error(error);
+        this.logger.error('OAuth login transaction failed', error as Error);
         throw error;
       }
     });
@@ -112,7 +114,7 @@ export class AuthService {
       }
 
       if (dbRefreshToken.allocatedIp !== userIpAddress) {
-        console.log(
+        this.logger.warn(
           'Refresh token allocated IP does not match user IP address',
           {
             jti: dbRefreshToken.jwtId,
