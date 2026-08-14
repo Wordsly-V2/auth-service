@@ -24,7 +24,7 @@ Config through `src/config/configuration.ts`; required vars validated at boot (`
 
 - **Access + refresh tokens are RS256 JWTs** (15m / 30d), payload `{ userLoginId, jti }`. The key pair must match the api-gateway's.
 - **Refresh tokens are persisted and rotated**: each refresh token's `jti` (uuidv7) links to a `RefreshToken` row. `handleRefreshToken` (`src/auth/auth.service.ts`) deletes the old row and inserts a new one on every refresh.
-- **IP binding as theft detection**: each refresh row stores `allocatedIp`; a refresh from a different IP revokes ALL of the user's refresh tokens.
+- **Reuse detection as theft detection**: a valid signature over a `jti` with no `RefreshToken` row means the token was already rotated away and is being replayed — that revokes ALL of the user's refresh tokens. Each row still stores `allocatedIp`, but a mismatch only logs a warning and rotates normally: a changed IP is almost always a network handover (notably when an offline client reconnects to flush queued practice), so revoking on it stranded legitimate syncs.
 - Logout deletes by `jti` (or all rows with `isLoggedOutFromAllDevices`). Expired rows are swept by a daily cron (`src/auth/refresh-token-cleanup.service.ts`).
 
 ## Data model (`prisma/schema.prisma`)

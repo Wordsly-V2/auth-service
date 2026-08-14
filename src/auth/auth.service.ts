@@ -110,10 +110,33 @@ export class AuthService {
       });
 
       if (!dbRefreshToken) {
+        // A valid signature over a jti we already rotated away means this token
+        // was replayed — either the client resent a spent token, or an attacker
+        // is using a copy the victim already refreshed past. That is the real
+        // theft signal (unlike a changed IP, which is just a network handover),
+        // so burn the whole family and force a fresh login.
+        this.logger.warn('Refresh token reuse detected', {
+          jti: jwtPayload.jti,
+          userLoginId: jwtPayload.userLoginId,
+        });
+
+        await transaction.refreshToken.deleteMany({
+          where: {
+            userLoginId: jwtPayload.userLoginId,
+          },
+        });
+
         throw new UnauthorizedException('Refresh token not found');
       }
 
       if (dbRefreshToken.allocatedIp !== userIpAddress) {
+        // Rotate and warn, never revoke. A changed IP is overwhelmingly a
+        // legitimate network handover (cell <-> wifi, new DHCP lease, CGNAT
+        // egress change) — exactly what happens when a client comes back from
+        // being offline and flushes its queued practice. Revoking here stranded
+        // that sync behind an interactive login on every device. Theft is
+        // caught by the reuse check above instead; rotation below is unchanged,
+        // so refresh tokens remain single-use.
         this.logger.warn(
           'Refresh token allocated IP does not match user IP address',
           {
@@ -121,17 +144,6 @@ export class AuthService {
             allocatedIp: dbRefreshToken.allocatedIp,
             userIpAddress,
           },
-        );
-
-        // revoke all refresh tokens for the user
-        await transaction.refreshToken.deleteMany({
-          where: {
-            userLoginId: dbRefreshToken.userLoginId,
-          },
-        });
-
-        throw new UnauthorizedException(
-          'Refresh token allocated IP does not match user IP address',
         );
       }
 
