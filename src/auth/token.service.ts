@@ -84,7 +84,7 @@ export class TokenService {
         try {
             const { payload } = await jwtVerify(token, key.privateKey, {
                 algorithms: ['RS256'],
-                issuer: this.configService.get<string>('jwt.issuer'),
+                issuer: this.configService.get<string>('publicBaseUrl'),
                 audience: this.audienceFor(expected),
                 clockTolerance: 60,
             });
@@ -135,7 +135,9 @@ export class TokenService {
             typ: params.typ,
         })
             .setProtectedHeader({ alg: 'RS256', kid })
-            .setIssuer(this.configService.get<string>('jwt.issuer') as string)
+            .setIssuer(
+                this.configService.get<string>('publicBaseUrl') as string,
+            )
             .setAudience(params.audience)
             .setJti(params.jti)
             .setIssuedAt()

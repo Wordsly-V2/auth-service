@@ -3,9 +3,11 @@ export default () => ({
     corsEnabledOrigins: process.env.CORS_ENABLED_ORIGINS,
     internalServiceToServiceToken:
         process.env.INTERNAL_SERVICE_TO_SERVICE_TOKEN,
-    // The address browsers reach this service on, through the gateway. Used as
-    // the token issuer and as the base of the discovery document, so it must be
-    // the public URL and never the in-cluster hostname.
+    // The address browsers reach this service on, through the gateway. This is
+    // the service's whole public identity: the `iss` claim on every token and
+    // the base of the discovery document, so it must be the public URL and
+    // never the in-cluster hostname. Verifiers compare `iss` exactly, so this
+    // must equal the other services' JWT_ISSUER.
     publicBaseUrl: process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000',
     // Hops between this service and the client. The gateway proxies to it, so
     // without this every request's IP is the gateway's and the refresh flow's
@@ -17,7 +19,6 @@ export default () => ({
     jwt: {
         signingKeys: process.env.JWT_SIGNING_KEYS,
         activeKid: process.env.JWT_ACTIVE_KID,
-        issuer: process.env.JWT_ISSUER ?? process.env.PUBLIC_BASE_URL,
         audience: process.env.JWT_AUDIENCE ?? 'wordsly-api',
         refreshAudience: process.env.JWT_REFRESH_AUDIENCE ?? 'wordsly-auth',
         expiresIn: process.env.JWT_EXPIRES_IN ?? '15m',

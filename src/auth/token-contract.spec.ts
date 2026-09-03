@@ -14,7 +14,7 @@ describe('token <-> JWKS contract', () => {
     const USER = '11111111-1111-1111-1111-111111111111';
 
     const config = {
-        'jwt.issuer': ISSUER,
+        publicBaseUrl: ISSUER,
         'jwt.audience': 'wordsly-api',
         'jwt.refreshAudience': 'wordsly-auth',
         'jwt.expiresIn': '15m',

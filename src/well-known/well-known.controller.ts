@@ -23,12 +23,13 @@ export class WellKnownController {
     @Get('openid-configuration')
     @Header('Cache-Control', 'public, max-age=300')
     discovery() {
-        const issuer = this.configService.get<string>('jwt.issuer');
-        const publicBaseUrl =
-            this.configService.get<string>('publicBaseUrl') ?? issuer;
+        // One value plays both roles: the `iss` claim on tokens and the base of
+        // every url advertised here. The gateway forwards `/.well-known/**`
+        // untouched, so the path published here is the real public one.
+        const publicBaseUrl = this.configService.get<string>('publicBaseUrl');
 
         return {
-            issuer,
+            issuer: publicBaseUrl,
             jwks_uri: `${publicBaseUrl}/.well-known/jwks.json`,
             id_token_signing_alg_values_supported: ['RS256'],
             subject_types_supported: ['public'],
