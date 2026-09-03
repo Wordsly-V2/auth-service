@@ -1,5 +1,7 @@
 export const cacheKeys = {
-  userProfile: () => 'profile',
+  // Versioned: bump whenever the cached profile payload shape changes, so
+  // already-cached entries are ignored rather than served with missing fields.
+  userProfile: () => 'profile:v2',
 };
 
 export const userCachePattern = (userLoginId: string): string =>

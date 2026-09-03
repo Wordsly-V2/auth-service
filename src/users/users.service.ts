@@ -34,6 +34,7 @@ export class UsersService {
 
     return {
       id: user.id,
+      userLoginId: user.userLoginId,
       gmail: user.gmail,
       displayName: user.displayName,
       pictureUrl: user.pictureUrl,

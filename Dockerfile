@@ -9,6 +9,10 @@ COPY . .
 
 RUN npm run build
 
-EXPOSE 3001 3002
+EXPOSE 3001
 
-CMD ["node", "dist/main.js"]
+# The build emits dist/src/main.js (tsconfig rootDir includes src), not
+# dist/main.js -- the old CMD pointed at a path that never existed, so the
+# container exited immediately on every start. Go through package.json so the
+# entrypoint cannot drift from the script again.
+CMD ["npm", "run", "start:prod"]

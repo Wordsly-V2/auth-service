@@ -53,6 +53,12 @@ model RefreshToken {
 
   token       String  @unique
   jwtId       String  @unique @map("jwt_id")
+  /// Session id, stable across rotation. The access token carries the same value,
+  /// which is what lets logout end one device's session: the access and refresh
+  /// tokens no longer share a `jti`, so there is nothing else linking the pair.
+  /// Not unique -- rotation deletes the old row and inserts a new one in the same
+  /// transaction, and a unique constraint would make a retried transaction collide.
+  sessionId   String  @map("session_id") @db.Uuid
   allocatedIp String? @map("allocated_ip")
   expiresAt   DateTime @map("expires_at") @db.Timestamptz
 
@@ -61,6 +67,7 @@ model RefreshToken {
 
   @@index([userLoginId])
   @@index([jwtId])
+  @@index([sessionId])
   @@index([expiresAt])
   @@map("refresh_tokens")
 }
