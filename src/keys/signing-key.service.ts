@@ -29,7 +29,7 @@ interface RawSigningKey {
     privateKey?: unknown;
 }
 
-const PRIVATE_PEM_MARKER = '-----BEGIN';
+export const PRIVATE_PEM_MARKER = '-----BEGIN';
 
 @Injectable()
 export class SigningKeyService implements OnModuleInit {
@@ -170,7 +170,7 @@ export class SigningKeyService implements OnModuleInit {
  * blocks, so the documented form is base64. Raw is still accepted so existing
  * deployments keep working untouched.
  */
-function decodeMaybeBase64(value: string): string {
+export function decodeMaybeBase64(value: string): string {
     const trimmed = value.trim();
     if (trimmed.includes(PRIVATE_PEM_MARKER) || trimmed.startsWith('[')) {
         return trimmed;

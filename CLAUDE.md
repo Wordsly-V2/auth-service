@@ -16,13 +16,14 @@ npm run test               # jest (rootDir=src, *.spec.ts)
 npx jest path/to/file.spec.ts   # single test file
 npx prisma migrate dev     # create/apply migrations
 npx prisma generate        # regenerate client after schema changes
+npm run keys:generate -- --append   # add a JWT signing key to the set in .env (rotation)
 ```
 
 Config through `src/config/configuration.ts`; required vars validated at boot (`src/config/validate-env.ts`). Redis via `src/cache/cache.service.ts`.
 
 ## Token model (the heart of this service)
 
-- **Access + refresh tokens are RS256 JWTs** (15m / 30d), payload `{ userLoginId, jti }`. The key pair must match the api-gateway's.
+- **Access + refresh tokens are RS256 JWTs** (15m / 30d), payload `{ userLoginId, jti }`. This service is the only holder of the private keys; everyone else verifies against `/.well-known/jwks.json`.
 - **Refresh tokens are persisted and rotated**: each refresh token's `jti` (uuidv7) links to a `RefreshToken` row. `handleRefreshToken` (`src/auth/auth.service.ts`) deletes the old row and inserts a new one on every refresh.
 - **Reuse detection as theft detection**: a valid signature over a `jti` with no `RefreshToken` row means the token was already rotated away and is being replayed — that revokes ALL of the user's refresh tokens. Each row still stores `allocatedIp`, but a mismatch only logs a warning and rotates normally: a changed IP is almost always a network handover (notably when an offline client reconnects to flush queued practice), so revoking on it stranded legitimate syncs.
 - Logout deletes by `jti` (or all rows with `isLoggedOutFromAllDevices`). Expired rows are swept by a daily cron (`src/auth/refresh-token-cleanup.service.ts`).
