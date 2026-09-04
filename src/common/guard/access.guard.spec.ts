@@ -7,12 +7,11 @@ import { UnauthorizedException } from '@nestjs/common';
  *
  * This guard is the only thing standing between the internet and every route on
  * the service, so each way in — and each way *not* in — is pinned explicitly.
- * The case that matters most is the last one: a user token must not open a route
- * marked internal-only, because those routes mint and destroy credentials for
- * whatever identity the body names.
+ * The case that matters most is the retired internal token: it used to admit a
+ * caller with no identity at all, and the ownership check then waved those
+ * callers through for any user id.
  */
 describe('AccessGuard', () => {
-    const INTERNAL_TOKEN = 'shared-internal-token';
     const PAYLOAD = {
         sub: 'user-1',
         userLoginId: 'user-1',
@@ -40,7 +39,6 @@ describe('AccessGuard', () => {
         verify = jest.fn().mockResolvedValue(PAYLOAD);
         return new AccessGuard(
             { getAllAndOverride: (key: string) => metadata[key] } as never,
-            { get: () => INTERNAL_TOKEN } as never,
             { verify } as never,
         );
     };
@@ -53,21 +51,10 @@ describe('AccessGuard', () => {
         expect(verify).not.toHaveBeenCalled();
     });
 
-    it('admits a peer service on the internal token, with no user attached', async () => {
-        const guard = buildGuard();
-        const { context, request } = buildContext({
-            headers: { 'x-service-token': INTERNAL_TOKEN } as never,
-        });
-
-        await expect(guard.canActivate(context)).resolves.toBe(true);
-        expect(request.isInternalCall).toBe(true);
-        expect(request.user).toBeUndefined();
-    });
-
-    it('rejects a wrong internal token rather than falling through to it', async () => {
+    it('no longer admits a peer service on the retired internal token', async () => {
         const guard = buildGuard();
         const { context } = buildContext({
-            headers: { 'x-service-token': 'not-the-token' } as never,
+            headers: { 'x-service-token': 'shared-internal-token' },
         });
 
         await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
@@ -78,7 +65,7 @@ describe('AccessGuard', () => {
     it('attaches the verified identity for a bearer token', async () => {
         const guard = buildGuard();
         const { context, request } = buildContext({
-            headers: { authorization: 'Bearer good-token' } as never,
+            headers: { authorization: 'Bearer good-token' },
         });
 
         await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -96,7 +83,7 @@ describe('AccessGuard', () => {
         // expected type is handed to the verifier, which enforces it.
         verify.mockRejectedValue(new UnauthorizedException());
         const { context } = buildContext({
-            headers: { authorization: 'Bearer refresh-token' } as never,
+            headers: { authorization: 'Bearer refresh-token' },
         });
 
         await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
@@ -119,34 +106,12 @@ describe('AccessGuard', () => {
     ])('rejects %s', async (_label, authorization) => {
         const guard = buildGuard();
         const { context } = buildContext({
-            headers: { authorization } as never,
+            headers: { authorization },
         });
 
         await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
             UnauthorizedException,
         );
-    });
-
-    it('refuses a valid user token on an @InternalOnly() route', async () => {
-        const guard = buildGuard({ isInternalOnly: true });
-        const { context } = buildContext({
-            headers: { authorization: 'Bearer good-token' } as never,
-        });
-
-        await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
-            UnauthorizedException,
-        );
-        // It must not even be verified: the answer is no regardless of validity.
-        expect(verify).not.toHaveBeenCalled();
-    });
-
-    it('still admits a peer service on an @InternalOnly() route', async () => {
-        const guard = buildGuard({ isInternalOnly: true });
-        const { context } = buildContext({
-            headers: { 'x-service-token': INTERNAL_TOKEN } as never,
-        });
-
-        await expect(guard.canActivate(context)).resolves.toBe(true);
     });
 
     it('skips non-HTTP transports, which have no headers to check', async () => {

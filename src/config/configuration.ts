@@ -1,8 +1,6 @@
 export default () => ({
     port: parseInt(process.env.PORT ?? '3001', 10) ?? 3001,
     corsEnabledOrigins: process.env.CORS_ENABLED_ORIGINS,
-    internalServiceToServiceToken:
-        process.env.INTERNAL_SERVICE_TO_SERVICE_TOKEN,
     // The address browsers reach this service on, through the gateway. This is
     // the service's whole public identity: the `iss` claim on every token and
     // the base of the discovery document, so it must be the public URL and

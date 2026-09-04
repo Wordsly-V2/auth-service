@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Wordsly auth microservice (NestJS + Prisma + PostgreSQL, port 3001). Owns users and token lifecycle. Internal-only: every controller is guarded by `InternalServiceGuard` (`src/guard/internal-service/`), which requires the shared `x-service-token` header — only the api-gateway calls this service. Note: controllers use `@Payload()` from `@nestjs/microservices`, but these are plain HTTP `@Post` handlers, not RPC.
+Wordsly auth microservice (NestJS + Prisma + PostgreSQL, port 3001). Owns users and the token lifecycle, and is the identity provider for the whole mesh: it holds the only copy of the RSA signing keys and publishes the public half at `/.well-known/jwks.json`.
+
+Reached through the gateway, which forwards but does not verify. Two global guards decide everything (`src/common/guard/`, registered as `APP_GUARD` in `app.module.ts`): `AccessGuard` is deny-by-default with two ways in — `@Public()`, or a valid RS256 access token — and `UserScopeGuard` refuses any request that tries to name the user it acts on. Handlers get the caller's id from `@CurrentUser()`, which reads the token's subject.
+
+`AuthSessionController` is the browser-facing half (the Google handshake, refresh rotation, logout). It moved here from the gateway, which used to run the handshake and decode refresh tokens on this service's behalf — this service then minted tokens from whatever it was handed without checking a signature.
 
 ## Commands
 

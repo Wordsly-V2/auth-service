@@ -1,7 +1,5 @@
-import { IS_INTERNAL_ONLY_KEY } from '@/common/decorators/internal-only.decorator';
 import { IS_PUBLIC_KEY } from '@/common/decorators/public.decorator';
 import { AuthenticatedRequest } from '@/common/guard/authenticated-request';
-import { isValidInternalToken } from '@/common/internal-token';
 import { TokenService } from '@/auth/token.service';
 import {
     CanActivate,
@@ -9,7 +7,6 @@ import {
     Injectable,
     UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 
 /**
@@ -17,20 +14,18 @@ import { Reflector } from '@nestjs/core';
  *
  * Global and deny-by-default on purpose: this service sits behind a proxy that
  * forwards whatever it is given, so a controller that simply forgot a decorator
- * must not end up publicly readable. Three ways in, in order:
+ * must not end up publicly readable. Two ways in:
  *
- *   1. `@Public()` — discovery, health, and the OAuth handshake itself.
- *   2. The internal service token — a peer service, no end-user identity.
- *   3. A valid access token — a browser, identity attached to the request.
- *
- * `@InternalOnly()` removes step 3 for routes where a user token must never be
- * sufficient, such as anything that mints or destroys credentials.
+ *   1. `@Public()` — discovery, health, and the OAuth handshake itself. The
+ *      refresh endpoint is here too: the refresh token is itself the credential
+ *      and is verified inside the service before anything is issued.
+ *   2. A valid access token — identity attached to the request for
+ *      `@CurrentUser()` to read.
  */
 @Injectable()
 export class AccessGuard implements CanActivate {
     constructor(
         private readonly reflector: Reflector,
-        private readonly configService: ConfigService,
         private readonly tokenService: TokenService,
     ) {}
 
@@ -48,30 +43,6 @@ export class AccessGuard implements CanActivate {
         const request = context
             .switchToHttp()
             .getRequest<AuthenticatedRequest>();
-
-        const isInternalOnly = this.reflector.getAllAndOverride<boolean>(
-            IS_INTERNAL_ONLY_KEY,
-            [context.getHandler(), context.getClass()],
-        );
-
-        const internalToken = this.configService.get<string>(
-            'internalServiceToServiceToken',
-        );
-        if (
-            isValidInternalToken(
-                request.headers['x-service-token'] as string | undefined,
-                internalToken,
-            )
-        ) {
-            request.isInternalCall = true;
-            return true;
-        }
-
-        if (isInternalOnly) {
-            throw new UnauthorizedException(
-                'This endpoint is callable only by internal services',
-            );
-        }
 
         const token = readBearerToken(request);
         if (!token) {

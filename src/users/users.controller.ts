@@ -1,18 +1,20 @@
 import { IUser } from '@/users/dto/users.dto';
 import { UsersService } from '@/users/users.service';
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
+import { CurrentUser } from '@/common/guard/current-user.decorator';
 
 /**
- * No per-controller guard: AccessGuard and OwnerGuard run globally. A peer
- * service may read any profile; a browser may read only its own, and `me` is
- * rewritten to the token's subject before this handler sees it.
+ * No per-controller guard: AccessGuard and UserScopeGuard run globally. The
+ * route used to be `users/:userLoginId/profile`, so which profile you got was
+ * decided by a segment the caller wrote and a guard had to second-guess. There
+ * is only one profile reachable here now — the token holder's.
  */
-@Controller('users')
+@Controller('profile')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+    constructor(private readonly usersService: UsersService) {}
 
-  @Get(':userLoginId/profile')
-  getProfile(@Param('userLoginId') userLoginId: string): Promise<IUser> {
-    return this.usersService.getProfile(userLoginId);
-  }
+    @Get()
+    getProfile(@CurrentUser() userLoginId: string): Promise<IUser> {
+        return this.usersService.getProfile(userLoginId);
+    }
 }
