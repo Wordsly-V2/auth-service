@@ -54,9 +54,8 @@ describe('AuthService.handleRefreshToken', () => {
         };
 
         const prismaService = {
-            $transaction: jest.fn(
-                (fn: (tx: typeof transaction) => unknown) =>
-                    fn(transaction) as unknown,
+            $transaction: jest.fn((fn: (tx: typeof transaction) => unknown) =>
+                fn(transaction),
             ),
         };
 

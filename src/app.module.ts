@@ -13,11 +13,15 @@ import { UsersModule } from '@/users/users.module';
 import { WellKnownModule } from '@/well-known/well-known.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { HealthModule } from './health/health.module';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { RequestContextLogger } from './common/request-context-logger';
 
 @Module({
     imports: [
+        HealthModule,
         ScheduleModule.forRoot(),
         ConfigModule.forRoot({
             isGlobal: true,
@@ -34,6 +38,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     ],
     controllers: [AppController],
     providers: [
+        RequestContextLogger,
+        { provide: APP_FILTER, useClass: AllExceptionsFilter },
         AppService,
         // Registering globally makes the service deny-by-default, so a controller
         // that forgets a decorator fails closed rather than becoming public.

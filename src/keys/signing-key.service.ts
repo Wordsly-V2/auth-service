@@ -108,9 +108,9 @@ export class SigningKeyService implements OnModuleInit {
 
                 return {
                     kid: entry.kid,
-                    privateKey: (await importPKCS8(pem, 'RS256', {
+                    privateKey: await importPKCS8(pem, 'RS256', {
                         extractable: true,
-                    })) as KeyObject,
+                    }),
                 };
             }),
         );

@@ -90,9 +90,7 @@ export class TokenService {
             });
 
             if (payload.typ !== expected) {
-                throw new UnauthorizedException(
-                    `Expected a ${expected} token`,
-                );
+                throw new UnauthorizedException(`Expected a ${expected} token`);
             }
 
             return payload as unknown as JwtAuthPayload;

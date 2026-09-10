@@ -41,16 +41,22 @@ export class AuthCookieService {
         res.clearCookie(REFRESH_TOKEN_COOKIE, options);
     }
 
+    /**
+     * Reads the options straight from configuration, which already applies every
+     * default. Repeating the fallbacks here meant `secure` defaulted to false in
+     * this file while configuration decided it separately — two answers to one
+     * question, and the insecure one won whenever config returned undefined.
+     */
     private options(): CookieOptions & { maxAge: number } {
         const get = <T>(key: string) =>
             this.configService.get<T>(`refreshTokenCookieOptions.${key}`);
 
         return {
-            httpOnly: get<boolean>('httpOnly') ?? true,
-            secure: get<boolean>('secure') ?? false,
-            sameSite: (get<string>('sameSite') ?? 'lax') as CookieOptions['sameSite'],
-            path: get<string>('path') ?? '/auth',
-            maxAge: ms((get<string>('maxAge') ?? '30d') as ms.StringValue),
+            httpOnly: get<boolean>('httpOnly'),
+            secure: get<boolean>('secure'),
+            sameSite: get<string>('sameSite') as CookieOptions['sameSite'],
+            path: get<string>('path'),
+            maxAge: ms(get<string>('maxAge') as ms.StringValue),
         };
     }
 }

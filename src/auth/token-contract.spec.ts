@@ -35,17 +35,26 @@ describe('token <-> JWKS contract', () => {
 
         const keySet = Buffer.from(
             JSON.stringify([
-                { kid: 'retired', privateKey: Buffer.from(pem()).toString('base64') },
-                { kid: 'active', privateKey: Buffer.from(pem()).toString('base64') },
+                {
+                    kid: 'retired',
+                    privateKey: Buffer.from(pem()).toString('base64'),
+                },
+                {
+                    kid: 'active',
+                    privateKey: Buffer.from(pem()).toString('base64'),
+                },
             ]),
         ).toString('base64');
 
         keys = new SigningKeyService({
-            get: (key: string) => ({ ...config, 'jwt.signingKeys': keySet })[key],
+            get: (key: string) =>
+                ({ ...config, 'jwt.signingKeys': keySet })[key],
         } as never);
         await keys.onModuleInit();
 
-        tokens = new TokenService(keys, { get: (k: string) => config[k] } as never);
+        tokens = new TokenService(keys, {
+            get: (k: string) => config[k],
+        } as never);
     });
 
     const issue = () =>
@@ -83,8 +92,12 @@ describe('token <-> JWKS contract', () => {
         const { accessToken, refreshToken } = await issue();
         const jwks = createLocalJWKSet(keys.getPublicJwks() as never);
 
-        const access = await jwtVerify(accessToken, jwks, { audience: 'wordsly-api' });
-        const refresh = await jwtVerify(refreshToken, jwks, { audience: 'wordsly-auth' });
+        const access = await jwtVerify(accessToken, jwks, {
+            audience: 'wordsly-api',
+        });
+        const refresh = await jwtVerify(refreshToken, jwks, {
+            audience: 'wordsly-auth',
+        });
 
         expect(access.payload.jti).not.toBe(refresh.payload.jti);
         expect(refresh.payload.sid).toBe(access.payload.sid);
@@ -110,7 +123,11 @@ describe('token <-> JWKS contract', () => {
 
     it('accepts each token as its own type', async () => {
         const { accessToken, refreshToken } = await issue();
-        await expect(tokens.verify(accessToken, 'access')).resolves.toMatchObject({ typ: 'access' });
-        await expect(tokens.verify(refreshToken, 'refresh')).resolves.toMatchObject({ typ: 'refresh' });
+        await expect(
+            tokens.verify(accessToken, 'access'),
+        ).resolves.toMatchObject({ typ: 'access' });
+        await expect(
+            tokens.verify(refreshToken, 'refresh'),
+        ).resolves.toMatchObject({ typ: 'refresh' });
     });
 });

@@ -1,4 +1,22 @@
+const isProduction = (process.env.NODE_ENV ?? 'development') === 'production';
+
+/**
+ * Cookie `secure` flag.
+ *
+ * Defaults to ON in production instead of OFF everywhere. The old default meant
+ * a deployment that simply never set REFRESH_TOKEN_COOKIE_SECURE shipped the
+ * refresh token over plain HTTP, and nothing failed to warn about it. The env
+ * var still wins where it is set, which is what local HTTP development needs.
+ */
+const refreshCookieSecure = (): boolean => {
+    const configured = process.env.REFRESH_TOKEN_COOKIE_SECURE;
+    if (configured === 'true') return true;
+    if (configured === 'false') return false;
+    return isProduction;
+};
+
 export default () => ({
+    nodeEnv: process.env.NODE_ENV ?? 'development',
     port: parseInt(process.env.PORT ?? '3001', 10) ?? 3001,
     corsEnabledOrigins: process.env.CORS_ENABLED_ORIGINS,
     // The address browsers reach this service on, through the gateway. This is
@@ -34,9 +52,14 @@ export default () => ({
     // 'cookie' keeps the refresh token in an httpOnly cookie; 'body' returns it
     // to the client, which cross-origin deployments need.
     refreshTokenDelivery: process.env.REFRESH_TOKEN_DELIVERY ?? 'cookie',
+    // The only place these defaults live. AuthCookieService used to repeat every
+    // fallback, so the effective value depended on which of the two you read.
     refreshTokenCookieOptions: {
         httpOnly: process.env.REFRESH_TOKEN_COOKIE_HTTP_ONLY !== 'false',
-        secure: process.env.REFRESH_TOKEN_COOKIE_SECURE === 'true',
+        secure: refreshCookieSecure(),
+        // 'lax' keeps the cookie on the top-level redirect back from Google.
+        // A cross-site deployment needs 'none', which browsers only accept
+        // alongside secure -- hence the pairing check in validate-env.
         sameSite: process.env.REFRESH_TOKEN_COOKIE_SAME_SITE ?? 'lax',
         maxAge: process.env.REFRESH_TOKEN_COOKIE_MAX_AGE ?? '30d',
         path: process.env.REFRESH_TOKEN_COOKIE_PATH ?? '/auth',

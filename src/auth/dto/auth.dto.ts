@@ -1,23 +1,23 @@
 /** A Google profile as passport hands it over, before it is normalised. */
 export interface IOAuthProfileDTO {
-  id: string;
-  displayName: string;
-  emails: { value: string }[];
-  photos: { value: string }[];
-  provider: string;
+    id: string;
+    displayName: string;
+    emails: { value: string }[];
+    photos: { value: string }[];
+    provider: string;
 }
 
 export interface IOAuthUserDTO {
-  id: string;
-  displayName: string;
-  email: string;
-  picture: string;
-  provider: 'google' | 'facebook';
+    id: string;
+    displayName: string;
+    email: string;
+    picture: string;
+    provider: 'google' | 'facebook';
 }
 
 export interface IOAuthLoginResponseDTO {
-  accessToken: string;
-  refreshToken: string;
+    accessToken: string;
+    refreshToken: string;
 }
 
 /** Discriminates an access token from a refresh token. See TokenService. */
@@ -32,16 +32,16 @@ export type TokenType = 'access' | 'refresh';
  * have not switched yet; it is removed once nothing reads it.
  */
 export interface JwtAuthPayload {
-  sub: string;
-  /** @deprecated Use `sub`. Retained for one migration window. */
-  userLoginId: string;
-  /** Session id. Stable across refresh rotation, so logout can target a device. */
-  sid: string;
-  typ: TokenType;
-  jti: string;
-  iss?: string;
-  aud?: string | string[];
-  exp?: number;
-  iat?: number;
-  nbf?: number;
+    sub: string;
+    /** @deprecated Use `sub`. Retained for one migration window. */
+    userLoginId: string;
+    /** Session id. Stable across refresh rotation, so logout can target a device. */
+    sid: string;
+    typ: TokenType;
+    jti: string;
+    iss?: string;
+    aud?: string | string[];
+    exp?: number;
+    iat?: number;
+    nbf?: number;
 }

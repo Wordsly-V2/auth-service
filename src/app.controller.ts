@@ -11,10 +11,4 @@ export class AppController {
     ping(): string {
         return this.appService.getHealth();
     }
-
-    @Public()
-    @Get('health')
-    getHealth(): string {
-        return this.appService.getHealth();
-    }
 }

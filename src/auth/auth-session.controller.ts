@@ -1,6 +1,10 @@
-import { AuthCookieService, REFRESH_TOKEN_COOKIE } from '@/auth/auth-cookie.service';
+import {
+    AuthCookieService,
+    REFRESH_TOKEN_COOKIE,
+} from '@/auth/auth-cookie.service';
 import { AuthService } from '@/auth/auth.service';
 import { IOAuthUserDTO, JwtAuthPayload } from '@/auth/dto/auth.dto';
+import { LogoutDto } from '@/auth/dto/logout.dto';
 import { Public } from '@/common/decorators/public.decorator';
 // `import type`: AuthenticatedRequest appears in a decorated handler signature,
 // and emitDecoratorMetadata would otherwise emit a runtime reference to an
@@ -128,7 +132,7 @@ export class AuthSessionController {
     @Post('logout')
     async logout(
         @Req() req: AuthenticatedRequest,
-        @Body() body: { isLoggedOutFromAllDevices?: boolean } = {},
+        @Body() body: LogoutDto = {},
         @Res() res: Response,
     ) {
         const user = req.user;

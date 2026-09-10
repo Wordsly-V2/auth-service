@@ -5,6 +5,7 @@ import {
 } from '@/auth/dto/auth.dto';
 import { CacheService } from '@/cache/cache.service';
 import { PrismaService } from '@/prisma/prisma.service';
+import { hashRefreshToken } from '@/auth/refresh-token-hash';
 import { TokenService } from '@/auth/token.service';
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Prisma, UserLogin } from '@prisma/client';
@@ -75,7 +76,7 @@ export class AuthService {
                         data: {
                             id: uuidv7(),
                             userLoginId: userLogin.id,
-                            token: refreshToken,
+                            tokenHash: hashRefreshToken(refreshToken),
                             jwtId: refreshJti,
                             sessionId: sid,
                             allocatedIp: userIpAddress ?? null,
@@ -186,7 +187,7 @@ export class AuthService {
                     data: {
                         id: uuidv7(),
                         userLoginId: dbRefreshToken.userLoginId,
-                        token: refreshToken,
+                        tokenHash: hashRefreshToken(refreshToken),
                         jwtId: refreshJti,
                         sessionId: sid,
                         allocatedIp: userIpAddress ?? null,

@@ -51,7 +51,10 @@ model RefreshToken {
   userLoginId String    @map("user_login_id") @db.Uuid
   userLogin   UserLogin @relation(fields: [userLoginId], references: [id])
 
-  token       String  @unique
+  /// SHA-256 of the refresh token, never the token itself. Nothing looks a row
+  /// up by this value -- `jwt_id` is the lookup key -- so storing only the hash
+  /// costs nothing and keeps a database read from yielding usable credentials.
+  tokenHash   String  @unique @map("token_hash")
   jwtId       String  @unique @map("jwt_id")
   /// Session id, stable across rotation. The access token carries the same value,
   /// which is what lets logout end one device's session: the access and refresh
