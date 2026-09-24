@@ -13,6 +13,17 @@ import { v7 as uuidv7 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import ms from 'ms';
 
+/**
+ * How long a rotated refresh token may still be presented. Long enough to cover
+ * tabs refreshing together and a retry after a lost response on a slow mobile
+ * link; short enough that a stolen copy is almost always caught as reuse.
+ */
+export const REFRESH_REUSE_GRACE_MS = 30_000;
+
+type RefreshOutcome =
+    | { kind: 'rotated'; tokens: IOAuthLoginResponseDTO }
+    | { kind: 'reused' };
+
 @Injectable()
 export class AuthService {
     private readonly logger = new Logger(AuthService.name);
@@ -124,83 +135,139 @@ export class AuthService {
             'refresh',
         );
 
-        return this.prismaService.$transaction(async (transaction) => {
-            const dbRefreshToken = await transaction.refreshToken.findUnique({
+        const now = new Date();
+        const outcome = await this.prismaService.$transaction(
+            async (transaction): Promise<RefreshOutcome> => {
+                const dbRefreshToken =
+                    await transaction.refreshToken.findUnique({
+                        where: {
+                            jwtId: jwtPayload.jti,
+                        },
+                    });
+
+                // A valid signature over a jti we no longer hold, or one rotated
+                // away longer ago than the grace window, means this token was
+                // replayed — the client resent a long-spent token, or an attacker
+                // is using a copy the victim already refreshed past. That is the
+                // real theft signal (unlike a changed IP, which is just a network
+                // handover). Revocation happens after this transaction: throwing
+                // in here would roll the revocation back with everything else.
+                if (
+                    !dbRefreshToken ||
+                    (dbRefreshToken.rotatedAt &&
+                        now.getTime() - dbRefreshToken.rotatedAt.getTime() >
+                            REFRESH_REUSE_GRACE_MS)
+                ) {
+                    return { kind: 'reused' };
+                }
+
+                if (dbRefreshToken.allocatedIp !== userIpAddress) {
+                    // Rotate and warn, never revoke. A changed IP is overwhelmingly a
+                    // legitimate network handover (cell <-> wifi, new DHCP lease, CGNAT
+                    // egress change) — exactly what happens when a client comes back from
+                    // being offline and flushes its queued practice. Revoking here stranded
+                    // that sync behind an interactive login on every device. Theft is
+                    // caught by the reuse check above instead.
+                    this.logger.warn(
+                        'Refresh token allocated IP does not match user IP address',
+                        {
+                            jti: dbRefreshToken.jwtId,
+                            allocatedIp: dbRefreshToken.allocatedIp,
+                            userIpAddress,
+                        },
+                    );
+                }
+
+                // Claim the row with a conditional update rather than trusting the
+                // read above: two concurrent refreshes of one token both see it
+                // unrotated, and only one of them may win the normal rotation.
+                const claimed =
+                    dbRefreshToken.rotatedAt === null &&
+                    (
+                        await transaction.refreshToken.updateMany({
+                            where: { id: dbRefreshToken.id, rotatedAt: null },
+                            data: { rotatedAt: now },
+                        })
+                    ).count === 1;
+
+                if (!claimed) {
+                    // Rotated moments ago: another tab refreshing at the same time,
+                    // or a retry after the response carrying the new pair was lost.
+                    // Answer with a fresh pair instead of treating it as theft, and
+                    // retire whatever the other refresh issued so the session still
+                    // has exactly one live refresh token.
+                    this.logger.log(
+                        'Refresh token reused within grace window',
+                        {
+                            jti: dbRefreshToken.jwtId,
+                            sessionId: dbRefreshToken.sessionId,
+                        },
+                    );
+                    await transaction.refreshToken.updateMany({
+                        where: {
+                            sessionId: dbRefreshToken.sessionId,
+                            rotatedAt: null,
+                        },
+                        data: { rotatedAt: now },
+                    });
+                }
+
+                // Rotation replaces the tokens but not the session: the device is the
+                // same one, so logging it out later must still be able to find this row.
+                const { accessToken, refreshToken, refreshJti, sid } =
+                    await this.generateJwtToken(
+                        dbRefreshToken.userLoginId,
+                        dbRefreshToken.sessionId,
+                    );
+
+                await Promise.all([
+                    // Rotated rows only need to outlive the grace window; past it, a
+                    // missing row reads as reuse just the same.
+                    transaction.refreshToken.deleteMany({
+                        where: {
+                            sessionId: dbRefreshToken.sessionId,
+                            rotatedAt: {
+                                lt: new Date(
+                                    now.getTime() - REFRESH_REUSE_GRACE_MS,
+                                ),
+                            },
+                        },
+                    }),
+                    transaction.refreshToken.create({
+                        data: {
+                            id: uuidv7(),
+                            userLoginId: dbRefreshToken.userLoginId,
+                            tokenHash: hashRefreshToken(refreshToken),
+                            jwtId: refreshJti,
+                            sessionId: sid,
+                            allocatedIp: userIpAddress ?? null,
+                            expiresAt: this.getRefreshTokenExpiresAt(),
+                        },
+                    }),
+                ]);
+
+                return {
+                    kind: 'rotated',
+                    tokens: { accessToken, refreshToken },
+                };
+            },
+        );
+
+        if (outcome.kind === 'reused') {
+            this.logger.warn('Refresh token reuse detected', {
+                jti: jwtPayload.jti,
+                userLoginId: jwtPayload.sub,
+            });
+            // Burn every session for the user and force a fresh login.
+            await this.prismaService.refreshToken.deleteMany({
                 where: {
-                    jwtId: jwtPayload.jti,
+                    userLoginId: jwtPayload.sub,
                 },
             });
+            throw new UnauthorizedException('Refresh token not found');
+        }
 
-            if (!dbRefreshToken) {
-                // A valid signature over a jti we already rotated away means this token
-                // was replayed — either the client resent a spent token, or an attacker
-                // is using a copy the victim already refreshed past. That is the real
-                // theft signal (unlike a changed IP, which is just a network handover),
-                // so burn the whole family and force a fresh login.
-                this.logger.warn('Refresh token reuse detected', {
-                    jti: jwtPayload.jti,
-                    userLoginId: jwtPayload.sub,
-                });
-
-                await transaction.refreshToken.deleteMany({
-                    where: {
-                        userLoginId: jwtPayload.sub,
-                    },
-                });
-
-                throw new UnauthorizedException('Refresh token not found');
-            }
-
-            if (dbRefreshToken.allocatedIp !== userIpAddress) {
-                // Rotate and warn, never revoke. A changed IP is overwhelmingly a
-                // legitimate network handover (cell <-> wifi, new DHCP lease, CGNAT
-                // egress change) — exactly what happens when a client comes back from
-                // being offline and flushes its queued practice. Revoking here stranded
-                // that sync behind an interactive login on every device. Theft is
-                // caught by the reuse check above instead; rotation below is unchanged,
-                // so refresh tokens remain single-use.
-                this.logger.warn(
-                    'Refresh token allocated IP does not match user IP address',
-                    {
-                        jti: dbRefreshToken.jwtId,
-                        allocatedIp: dbRefreshToken.allocatedIp,
-                        userIpAddress,
-                    },
-                );
-            }
-
-            // Rotation replaces the tokens but not the session: the device is the
-            // same one, so logging it out later must still be able to find this row.
-            const { accessToken, refreshToken, refreshJti, sid } =
-                await this.generateJwtToken(
-                    dbRefreshToken.userLoginId,
-                    dbRefreshToken.sessionId,
-                );
-
-            await Promise.all([
-                transaction.refreshToken.delete({
-                    where: {
-                        id: dbRefreshToken.id,
-                    },
-                }),
-                transaction.refreshToken.create({
-                    data: {
-                        id: uuidv7(),
-                        userLoginId: dbRefreshToken.userLoginId,
-                        tokenHash: hashRefreshToken(refreshToken),
-                        jwtId: refreshJti,
-                        sessionId: sid,
-                        allocatedIp: userIpAddress ?? null,
-                        expiresAt: this.getRefreshTokenExpiresAt(),
-                    },
-                }),
-            ]);
-
-            return {
-                accessToken,
-                refreshToken,
-            };
-        });
+        return outcome.tokens;
     }
 
     /**

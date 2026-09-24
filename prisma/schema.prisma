@@ -64,6 +64,10 @@ model RefreshToken {
   sessionId   String  @map("session_id") @db.Uuid
   allocatedIp String? @map("allocated_ip")
   expiresAt   DateTime @map("expires_at") @db.Timestamptz
+  /// Set when this token is exchanged. The row is kept for a short grace window
+  /// so a concurrent refresh from another tab, or a retry after a lost response,
+  /// gets a fresh pair instead of tripping reuse detection.
+  rotatedAt   DateTime? @map("rotated_at") @db.Timestamptz
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
