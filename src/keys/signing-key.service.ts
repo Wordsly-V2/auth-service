@@ -22,6 +22,11 @@ import { exportJWK, importPKCS8, type JWK } from 'jose';
 export interface SigningKey {
     kid: string;
     privateKey: KeyObject;
+    /**
+     * Derived once at load. Verification uses this rather than the private key
+     * so the private half is only ever handed to the signer.
+     */
+    publicKey: KeyObject;
 }
 
 interface RawSigningKey {
@@ -106,11 +111,14 @@ export class SigningKeyService implements OnModuleInit {
                     );
                 }
 
+                const privateKey = await importPKCS8<KeyObject>(pem, 'RS256', {
+                    extractable: true,
+                });
+
                 return {
                     kid: entry.kid,
-                    privateKey: await importPKCS8(pem, 'RS256', {
-                        extractable: true,
-                    }),
+                    privateKey,
+                    publicKey: createPublicKey(privateKey),
                 };
             }),
         );
@@ -154,7 +162,7 @@ export class SigningKeyService implements OnModuleInit {
     private async buildPublicJwks(): Promise<JWK[]> {
         return Promise.all(
             this.keys.map(async (key) => ({
-                ...(await exportJWK(createPublicKey(key.privateKey))),
+                ...(await exportJWK(key.publicKey)),
                 kid: key.kid,
                 use: 'sig',
                 alg: 'RS256',

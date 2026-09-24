@@ -20,6 +20,15 @@ import ms from 'ms';
  */
 export const REFRESH_REUSE_GRACE_MS = 30_000;
 
+/** The only `UserLogin.status` that may sign in; anything else is locked out. */
+export const ACTIVE_USER_LOGIN_STATUS = 'active';
+
+function assertActive(userLogin: Pick<UserLogin, 'status'>): void {
+    if (userLogin.status !== ACTIVE_USER_LOGIN_STATUS) {
+        throw new UnauthorizedException('Account is not active');
+    }
+}
+
 type RefreshOutcome =
     | { kind: 'rotated'; tokens: IOAuthLoginResponseDTO }
     | { kind: 'reused' };
@@ -40,6 +49,9 @@ export class AuthService {
         userIpAddress: string | undefined,
     ): Promise<IOAuthLoginResponseDTO> {
         let userLogin: UserLogin | null = null;
+        // Another user whose stale copy of this email was cleared; their cached
+        // profile has to go too.
+        let displacedUserLoginId: string | null = null;
 
         const result = await this.prismaService.$transaction(
             async (transaction) => {
@@ -56,9 +68,39 @@ export class AuthService {
                                 id: uuidv7(),
                                 providerUserId: userPayload.id,
                                 provider: userPayload.provider,
-                                status: 'active',
+                                status: ACTIVE_USER_LOGIN_STATUS,
                             },
                         });
+                    }
+
+                    assertActive(userLogin);
+
+                    // `gmail` is unique, but identity is `providerUserId`: Google
+                    // can hand an address to a different account (a deleted account's
+                    // address recycled, a Workspace user renamed). The provider is the
+                    // authority on who holds it *now*, so the stale copy is cleared
+                    // rather than failing this login with P2002. It is profile data
+                    // only -- nothing looks a user up by it -- so no account is linked
+                    // or taken over by this.
+                    if (userPayload.email) {
+                        const holder = await transaction.user.findUnique({
+                            where: { gmail: userPayload.email },
+                            select: { id: true, userLoginId: true },
+                        });
+                        if (holder && holder.userLoginId !== userLogin.id) {
+                            this.logger.warn(
+                                'Email moved to another provider account; clearing it from the previous holder',
+                                {
+                                    userLoginId: userLogin.id,
+                                    previousUserLoginId: holder.userLoginId,
+                                },
+                            );
+                            await transaction.user.update({
+                                where: { id: holder.id },
+                                data: { gmail: null },
+                            });
+                            displacedUserLoginId = holder.userLoginId;
+                        }
                     }
 
                     await transaction.user.upsert({
@@ -110,6 +152,9 @@ export class AuthService {
         );
 
         await this.cacheService.invalidateUser(userLogin!.id);
+        if (displacedUserLoginId) {
+            await this.cacheService.invalidateUser(displacedUserLoginId);
+        }
 
         return result;
     }
@@ -143,6 +188,7 @@ export class AuthService {
                         where: {
                             jwtId: jwtPayload.jti,
                         },
+                        include: { userLogin: { select: { status: true } } },
                     });
 
                 // A valid signature over a jti we no longer hold, or one rotated
@@ -160,6 +206,12 @@ export class AuthService {
                 ) {
                     return { kind: 'reused' };
                 }
+
+                // Checked on every refresh, not just at login: a refresh token
+                // outlives the access token by weeks, so this is where a suspended
+                // account actually gets locked out. Thrown before the row is
+                // claimed, so the rollback leaves nothing half-rotated.
+                assertActive(dbRefreshToken.userLogin);
 
                 if (dbRefreshToken.allocatedIp !== userIpAddress) {
                     // Rotate and warn, never revoke. A changed IP is overwhelmingly a

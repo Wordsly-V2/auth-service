@@ -70,7 +70,7 @@ export class TokenService {
     /**
      * Verify a token this service issued.
      *
-     * Done in-process against the loaded private keys rather than over HTTP:
+     * Done in-process against the loaded keys' public halves rather than over HTTP:
      * this service *is* the issuer, so fetching its own JWKS through the network
      * would be a pointless round trip and a needless failure mode.
      */
@@ -82,7 +82,7 @@ export class TokenService {
         }
 
         try {
-            const { payload } = await jwtVerify(token, key.privateKey, {
+            const { payload } = await jwtVerify(token, key.publicKey, {
                 algorithms: ['RS256'],
                 issuer: this.configService.get<string>('publicBaseUrl'),
                 audience: this.audienceFor(expected),

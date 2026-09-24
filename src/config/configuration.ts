@@ -15,6 +15,11 @@ const refreshCookieSecure = (): boolean => {
     return isProduction;
 };
 
+// Shared so the refresh cookie can default to the token's own lifetime. A
+// function, not a constant: ConfigModule loads .env after this file is imported.
+const refreshTokenExpiresIn = (): string =>
+    process.env.JWT_REFRESH_TOKEN_EXPIRES_IN ?? '30d';
+
 export default () => ({
     nodeEnv: process.env.NODE_ENV ?? 'development',
     port: parseInt(process.env.PORT ?? '3001', 10) ?? 3001,
@@ -38,8 +43,7 @@ export default () => ({
         audience: process.env.JWT_AUDIENCE ?? 'wordsly-api',
         refreshAudience: process.env.JWT_REFRESH_AUDIENCE ?? 'wordsly-auth',
         expiresIn: process.env.JWT_EXPIRES_IN ?? '15m',
-        refreshTokenExpiresIn:
-            process.env.JWT_REFRESH_TOKEN_EXPIRES_IN ?? '30d',
+        refreshTokenExpiresIn: refreshTokenExpiresIn(),
     },
     googleOAuth: {
         clientId: process.env.GOOGLE_CLIENT_ID,
@@ -61,7 +65,11 @@ export default () => ({
         // A cross-site deployment needs 'none', which browsers only accept
         // alongside secure -- hence the pairing check in validate-env.
         sameSite: process.env.REFRESH_TOKEN_COOKIE_SAME_SITE ?? 'lax',
-        maxAge: process.env.REFRESH_TOKEN_COOKIE_MAX_AGE ?? '30d',
+        // Follows the refresh token's lifetime unless overridden. It used to
+        // default to its own '30d', so shortening JWT_REFRESH_TOKEN_EXPIRES_IN
+        // left browsers holding a cookie whose token had long since expired.
+        maxAge:
+            process.env.REFRESH_TOKEN_COOKIE_MAX_AGE ?? refreshTokenExpiresIn(),
         path: process.env.REFRESH_TOKEN_COOKIE_PATH ?? '/auth',
     },
     redis: {

@@ -3,7 +3,7 @@
 jest.mock('uuid', () => ({ v7: () => '00000000-0000-7000-8000-000000000000' }));
 
 import { AuthService, REFRESH_REUSE_GRACE_MS } from '@/auth/auth.service';
-import { JwtAuthPayload } from '@/auth/dto/auth.dto';
+import { IOAuthUserDTO, JwtAuthPayload } from '@/auth/dto/auth.dto';
 import { UnauthorizedException } from '@nestjs/common';
 
 /**
@@ -41,6 +41,7 @@ describe('AuthService.handleRefreshToken', () => {
         sessionId: SESSION_ID,
         allocatedIp: '203.0.113.7',
         rotatedAt: null,
+        userLogin: { status: 'active' },
         ...overrides,
     });
 
@@ -232,6 +233,30 @@ describe('AuthService.handleRefreshToken', () => {
         );
     });
 
+    it('rejects a refresh for an account that is no longer active, without rotating', async () => {
+        transaction.refreshToken.findUnique.mockResolvedValue(
+            row({ userLogin: { status: 'suspended' } }),
+        );
+
+        await expect(refresh()).rejects.toBeInstanceOf(UnauthorizedException);
+
+        // Not theft, so the user's other sessions are left alone; and nothing is
+        // claimed or issued for the locked-out account.
+        expect(outside.refreshToken.deleteMany).not.toHaveBeenCalled();
+        expect(transaction.refreshToken.updateMany).not.toHaveBeenCalled();
+        expect(transaction.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('still treats a replayed token as theft before looking at account status', async () => {
+        transaction.refreshToken.findUnique.mockResolvedValue(null);
+
+        await expect(refresh()).rejects.toBeInstanceOf(UnauthorizedException);
+
+        expect(outside.refreshToken.deleteMany).toHaveBeenCalledWith({
+            where: { userLoginId: USER_LOGIN_ID },
+        });
+    });
+
     it('prunes rotated rows of the session that are past the grace window', async () => {
         transaction.refreshToken.findUnique.mockResolvedValue(row());
 
@@ -243,5 +268,136 @@ describe('AuthService.handleRefreshToken', () => {
                 rotatedAt: { lt: ANY_DATE },
             },
         });
+    });
+});
+
+/**
+ * Covers the two ways `handleOAuthLogin` used to go wrong for a real user: a
+ * non-active account signing straight back in, and a Google account whose email
+ * another row still held failing on the unique constraint (seen as login_failed).
+ */
+describe('AuthService.handleOAuthLogin', () => {
+    const USER_LOGIN_ID = '11111111-1111-1111-1111-111111111111';
+    const OTHER_USER_LOGIN_ID = '55555555-5555-5555-5555-555555555555';
+    const EMAIL = 'learner@example.com';
+
+    const oauthUser = (): IOAuthUserDTO => ({
+        id: 'google-sub-1',
+        provider: 'google',
+        email: EMAIL,
+        displayName: 'Learner',
+        picture: 'https://example.com/p.png',
+    });
+
+    let transaction: {
+        userLogin: { findUnique: jest.Mock; create: jest.Mock };
+        user: { findUnique: jest.Mock; update: jest.Mock; upsert: jest.Mock };
+        refreshToken: { create: jest.Mock };
+    };
+    let cacheService: { invalidateUser: jest.Mock };
+    let service: AuthService;
+
+    beforeEach(() => {
+        transaction = {
+            userLogin: {
+                findUnique: jest.fn().mockResolvedValue({
+                    id: USER_LOGIN_ID,
+                    status: 'active',
+                }),
+                create: jest.fn(),
+            },
+            user: {
+                findUnique: jest.fn().mockResolvedValue(null),
+                update: jest.fn().mockResolvedValue(undefined),
+                upsert: jest.fn().mockResolvedValue(undefined),
+            },
+            refreshToken: { create: jest.fn().mockResolvedValue(undefined) },
+        };
+        cacheService = {
+            invalidateUser: jest.fn().mockResolvedValue(undefined),
+        };
+
+        const prismaService = {
+            $transaction: jest.fn((fn: (tx: typeof transaction) => unknown) =>
+                fn(transaction),
+            ),
+        };
+
+        service = new AuthService(
+            prismaService as never,
+            {} as never,
+            {} as never,
+            cacheService as never,
+        );
+        jest.spyOn(service, 'generateJwtToken').mockResolvedValue({
+            accessToken: 'access',
+            refreshToken: 'refresh',
+            refreshJti: 'jti',
+            sid: 'sid',
+        });
+        jest.spyOn(
+            service as unknown as { getRefreshTokenExpiresAt: () => Date },
+            'getRefreshTokenExpiresAt',
+        ).mockReturnValue(new Date('2026-09-12T00:00:00.000Z'));
+        // The transaction's failure log is expected noise in the rejection tests.
+        jest.spyOn(
+            (service as unknown as { logger: { error: () => void } }).logger,
+            'error',
+        ).mockImplementation(() => undefined);
+    });
+
+    it('signs in an active account', async () => {
+        await expect(
+            service.handleOAuthLogin(oauthUser(), '203.0.113.7'),
+        ).resolves.toEqual({ accessToken: 'access', refreshToken: 'refresh' });
+        expect(transaction.refreshToken.create).toHaveBeenCalled();
+    });
+
+    it('refuses a non-active account and issues nothing', async () => {
+        transaction.userLogin.findUnique.mockResolvedValue({
+            id: USER_LOGIN_ID,
+            status: 'suspended',
+        });
+
+        await expect(
+            service.handleOAuthLogin(oauthUser(), '203.0.113.7'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+
+        expect(transaction.user.upsert).not.toHaveBeenCalled();
+        expect(transaction.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('moves an email held by another account instead of failing on the unique constraint', async () => {
+        transaction.user.findUnique.mockResolvedValue({
+            id: 'other-user',
+            userLoginId: OTHER_USER_LOGIN_ID,
+        });
+
+        await service.handleOAuthLogin(oauthUser(), '203.0.113.7');
+
+        expect(transaction.user.update).toHaveBeenCalledWith({
+            where: { id: 'other-user' },
+            data: { gmail: null },
+        });
+        const [upsertArgs] = transaction.user.upsert.mock.calls[0] as [
+            { update: { gmail: string } },
+        ];
+        expect(upsertArgs.update.gmail).toBe(EMAIL);
+        // The previous holder's cached profile would otherwise keep showing it.
+        expect(cacheService.invalidateUser).toHaveBeenCalledWith(
+            OTHER_USER_LOGIN_ID,
+        );
+    });
+
+    it('leaves the email alone when the account already holds it', async () => {
+        transaction.user.findUnique.mockResolvedValue({
+            id: 'own-user',
+            userLoginId: USER_LOGIN_ID,
+        });
+
+        await service.handleOAuthLogin(oauthUser(), '203.0.113.7');
+
+        expect(transaction.user.update).not.toHaveBeenCalled();
+        expect(cacheService.invalidateUser).toHaveBeenCalledTimes(1);
     });
 });
