@@ -41,3 +41,7 @@ Three tables, UUID PKs: `UserLogin` (provider identity, the id every other servi
 ## Conventions
 
 - Path alias `@/*` → `src/*`; feature modules; controllers thin, logic in services; Prisma only via `PrismaService` in services; DTOs with class-validator (global ValidationPipe with `whitelist` + `transform`); kebab-case folders; 4-space indent, single quotes.
+
+## Database rules
+
+- **Never use database enums** (workspace-wide rule, see `../../CLAUDE.md`): no Prisma `enum`, no `CREATE TYPE … AS ENUM`. Use `String` columns; the allowed values live in code as an `as const` list + union type and are validated at the boundary.
