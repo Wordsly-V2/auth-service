@@ -63,6 +63,7 @@ describe('token <-> JWKS contract', () => {
             sid: 'session-1',
             accessJti: 'access-jti',
             refreshJti: 'refresh-jti',
+            roles: ['admin'],
         });
 
     it('an access token verifies against the published JWKS alone', async () => {
@@ -86,6 +87,23 @@ describe('token <-> JWKS contract', () => {
             iss: ISSUER,
             aud: 'wordsly-api',
         });
+    });
+
+    it('carries roles on the access token only', async () => {
+        const { accessToken, refreshToken } = await issue();
+        const jwks = createLocalJWKSet(keys.getPublicJwks() as never);
+
+        const access = await jwtVerify(accessToken, jwks, {
+            audience: 'wordsly-api',
+        });
+        const refresh = await jwtVerify(refreshToken, jwks, {
+            audience: 'wordsly-auth',
+        });
+
+        // Services authorise on `roles`; a refresh re-reads them from the
+        // database, so the 30-day token must not carry a copy that could go stale.
+        expect(access.payload.roles).toEqual(['admin']);
+        expect(refresh.payload).not.toHaveProperty('roles');
     });
 
     it('gives the pair different jtis so a refresh token is not an access token', async () => {

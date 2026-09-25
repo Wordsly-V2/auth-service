@@ -26,6 +26,7 @@ export class UsersService {
             where: {
                 userLoginId,
             },
+            include: { userLogin: { select: { roles: true } } },
         });
 
         if (!user) {
@@ -38,6 +39,7 @@ export class UsersService {
             gmail: user.gmail,
             displayName: user.displayName,
             pictureUrl: user.pictureUrl,
+            roles: user.userLogin.roles ?? [],
         };
     }
 }

@@ -41,7 +41,7 @@ describe('AuthService.handleRefreshToken', () => {
         sessionId: SESSION_ID,
         allocatedIp: '203.0.113.7',
         rotatedAt: null,
-        userLogin: { status: 'active' },
+        userLogin: { status: 'active', roles: ['admin'] },
         ...overrides,
     });
 
@@ -222,9 +222,12 @@ describe('AuthService.handleRefreshToken', () => {
 
         await refresh();
 
+        // Roles come from the row, not the presented token, so a grant or a
+        // revocation lands at the next refresh.
         expect(service.generateJwtToken).toHaveBeenCalledWith(
             USER_LOGIN_ID,
             SESSION_ID,
+            ['admin'],
         );
         expect(transaction.refreshToken.create).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -235,7 +238,7 @@ describe('AuthService.handleRefreshToken', () => {
 
     it('rejects a refresh for an account that is no longer active, without rotating', async () => {
         transaction.refreshToken.findUnique.mockResolvedValue(
-            row({ userLogin: { status: 'suspended' } }),
+            row({ userLogin: { status: 'suspended', roles: [] } }),
         );
 
         await expect(refresh()).rejects.toBeInstanceOf(UnauthorizedException);
@@ -290,11 +293,17 @@ describe('AuthService.handleOAuthLogin', () => {
     });
 
     let transaction: {
-        userLogin: { findUnique: jest.Mock; create: jest.Mock };
+        userLogin: {
+            findUnique: jest.Mock;
+            create: jest.Mock;
+            update: jest.Mock;
+        };
         user: { findUnique: jest.Mock; update: jest.Mock; upsert: jest.Mock };
         refreshToken: { create: jest.Mock };
     };
     let cacheService: { invalidateUser: jest.Mock };
+    let adminEmails: string;
+    let generateJwtToken: jest.SpyInstance;
     let service: AuthService;
 
     beforeEach(() => {
@@ -303,8 +312,14 @@ describe('AuthService.handleOAuthLogin', () => {
                 findUnique: jest.fn().mockResolvedValue({
                     id: USER_LOGIN_ID,
                     status: 'active',
+                    roles: [],
                 }),
                 create: jest.fn(),
+                update: jest.fn(({ data }: { data: { roles: string[] } }) => ({
+                    id: USER_LOGIN_ID,
+                    status: 'active',
+                    roles: data.roles,
+                })),
             },
             user: {
                 findUnique: jest.fn().mockResolvedValue(null),
@@ -323,13 +338,18 @@ describe('AuthService.handleOAuthLogin', () => {
             ),
         };
 
+        adminEmails = '';
         service = new AuthService(
             prismaService as never,
             {} as never,
-            {} as never,
+            {
+                get: (key: string) =>
+                    key === 'adminEmails' ? adminEmails : undefined,
+            } as never,
             cacheService as never,
         );
-        jest.spyOn(service, 'generateJwtToken').mockResolvedValue({
+        generateJwtToken = jest.spyOn(service, 'generateJwtToken');
+        generateJwtToken.mockResolvedValue({
             accessToken: 'access',
             refreshToken: 'refresh',
             refreshJti: 'jti',
@@ -399,5 +419,51 @@ describe('AuthService.handleOAuthLogin', () => {
 
         expect(transaction.user.update).not.toHaveBeenCalled();
         expect(cacheService.invalidateUser).toHaveBeenCalledTimes(1);
+    });
+
+    it('grants the admin role to an address listed in ADMIN_EMAILS, case-insensitively', async () => {
+        adminEmails = 'someone@else.com, Learner@Example.com';
+
+        await service.handleOAuthLogin(oauthUser(), '203.0.113.7');
+
+        expect(transaction.userLogin.update).toHaveBeenCalledWith({
+            where: { id: USER_LOGIN_ID },
+            data: { roles: ['admin'] },
+        });
+        expect(generateJwtToken).toHaveBeenCalledWith(
+            USER_LOGIN_ID,
+            expect.any(String),
+            ['admin'],
+        );
+    });
+
+    it('does not touch roles for an address that is not listed', async () => {
+        adminEmails = 'someone@else.com';
+
+        await service.handleOAuthLogin(oauthUser(), '203.0.113.7');
+
+        expect(transaction.userLogin.update).not.toHaveBeenCalled();
+        expect(generateJwtToken).toHaveBeenCalledWith(
+            USER_LOGIN_ID,
+            expect.any(String),
+            [],
+        );
+    });
+
+    it('keeps an existing admin role even when the address is no longer listed', async () => {
+        transaction.userLogin.findUnique.mockResolvedValue({
+            id: USER_LOGIN_ID,
+            status: 'active',
+            roles: ['admin'],
+        });
+
+        await service.handleOAuthLogin(oauthUser(), '203.0.113.7');
+
+        expect(transaction.userLogin.update).not.toHaveBeenCalled();
+        expect(generateJwtToken).toHaveBeenCalledWith(
+            USER_LOGIN_ID,
+            expect.any(String),
+            ['admin'],
+        );
     });
 });

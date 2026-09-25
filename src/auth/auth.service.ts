@@ -7,6 +7,7 @@ import { CacheService } from '@/cache/cache.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { hashRefreshToken } from '@/auth/refresh-token-hash';
 import { TokenService } from '@/auth/token.service';
+import { bootstrapRoles, parseAdminEmails } from '@/auth/roles';
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Prisma, UserLogin } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
@@ -75,6 +76,26 @@ export class AuthService {
 
                     assertActive(userLogin);
 
+                    const grantedRoles = bootstrapRoles(
+                        userLogin.roles ?? [],
+                        userPayload.email,
+                        parseAdminEmails(
+                            this.configService.get<string>('adminEmails'),
+                        ),
+                    );
+                    if (grantedRoles) {
+                        userLogin = await transaction.userLogin.update({
+                            where: { id: userLogin.id },
+                            data: { roles: grantedRoles },
+                        });
+                        this.logger.log(
+                            'Granted admin role from ADMIN_EMAILS',
+                            {
+                                userLoginId: userLogin.id,
+                            },
+                        );
+                    }
+
                     // `gmail` is unique, but identity is `providerUserId`: Google
                     // can hand an address to a different account (a deleted account's
                     // address recycled, a Workspace user renamed). The provider is the
@@ -123,7 +144,11 @@ export class AuthService {
 
                     // A fresh login starts a new session.
                     const { accessToken, refreshToken, refreshJti, sid } =
-                        await this.generateJwtToken(userLogin.id, uuidv7());
+                        await this.generateJwtToken(
+                            userLogin.id,
+                            uuidv7(),
+                            userLogin.roles ?? [],
+                        );
 
                     await transaction.refreshToken.create({
                         data: {
@@ -188,7 +213,11 @@ export class AuthService {
                         where: {
                             jwtId: jwtPayload.jti,
                         },
-                        include: { userLogin: { select: { status: true } } },
+                        include: {
+                            userLogin: {
+                                select: { status: true, roles: true },
+                            },
+                        },
                     });
 
                 // A valid signature over a jti we no longer hold, or one rotated
@@ -266,10 +295,13 @@ export class AuthService {
 
                 // Rotation replaces the tokens but not the session: the device is the
                 // same one, so logging it out later must still be able to find this row.
+                // Roles are re-read here rather than copied from the old token, so a
+                // grant or revocation takes effect at the next refresh.
                 const { accessToken, refreshToken, refreshJti, sid } =
                     await this.generateJwtToken(
                         dbRefreshToken.userLoginId,
                         dbRefreshToken.sessionId,
+                        dbRefreshToken.userLogin.roles ?? [],
                     );
 
                 await Promise.all([
@@ -328,12 +360,17 @@ export class AuthService {
      * The two tokens get *separate* `jti`s. They used to share one, which meant a
      * refresh token was a structurally valid access token with a 30-day life.
      */
-    async generateJwtToken(userLoginId: string, sid: string) {
+    async generateJwtToken(
+        userLoginId: string,
+        sid: string,
+        roles: readonly string[],
+    ) {
         return this.tokenService.issueTokens({
             userLoginId,
             sid,
             accessJti: uuidv7(),
             refreshJti: uuidv7(),
+            roles,
         });
     }
 

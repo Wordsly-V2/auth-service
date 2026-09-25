@@ -35,6 +35,8 @@ export class TokenService {
         sid: string;
         accessJti: string;
         refreshJti: string;
+        /** Authorization roles; carried by the access token only. */
+        roles: readonly string[];
     }): Promise<IssuedTokens> {
         const [accessToken, refreshToken] = await Promise.all([
             this.sign({
@@ -42,6 +44,7 @@ export class TokenService {
                 sid: params.sid,
                 jti: params.accessJti,
                 typ: 'access',
+                roles: params.roles,
                 audience: this.audienceFor('access'),
                 expiresIn: this.configService.get<string>(
                     'jwt.expiresIn',
@@ -119,6 +122,12 @@ export class TokenService {
         sid: string;
         jti: string;
         typ: TokenType;
+        /**
+         * Set for access tokens only. Services authorise on the access token, and
+         * a refresh re-reads roles from the database, so a role change lands
+         * within one access-token lifetime instead of riding a 30-day token.
+         */
+        roles?: readonly string[];
         audience: string;
         expiresIn: string;
     }): Promise<string> {
@@ -131,6 +140,7 @@ export class TokenService {
             userLoginId: params.userLoginId,
             sid: params.sid,
             typ: params.typ,
+            ...(params.roles ? { roles: [...params.roles] } : {}),
         })
             .setProtectedHeader({ alg: 'RS256', kid })
             .setIssuer(

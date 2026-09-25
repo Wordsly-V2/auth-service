@@ -39,6 +39,8 @@ export interface JwtAuthPayload {
     sid: string;
     typ: TokenType;
     jti: string;
+    /** Authorization roles (e.g. "admin"). Access tokens only; absent on older tokens. */
+    roles?: string[];
     iss?: string;
     aud?: string | string[];
     exp?: number;

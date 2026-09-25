@@ -75,4 +75,7 @@ export default () => ({
     redis: {
         url: process.env.REDIS_URL,
     },
+    // Comma-separated addresses granted the admin role when they sign in.
+    // Optional; only ever adds the role (see src/auth/roles.ts).
+    adminEmails: process.env.ADMIN_EMAILS ?? '',
 });

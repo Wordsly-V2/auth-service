@@ -10,4 +10,10 @@ export interface IUser {
     gmail: string | null;
     displayName: string;
     pictureUrl: string | null;
+    /**
+     * Authorization roles, e.g. `['admin']`. For showing or hiding UI only: the
+     * services enforce roles from the access token, never from this payload.
+     * Cached with the profile, so a grant shows up once the cache is invalidated.
+     */
+    roles: string[];
 }
