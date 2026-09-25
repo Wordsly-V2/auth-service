@@ -21,6 +21,7 @@ npx jest path/to/file.spec.ts   # single test file
 npx prisma migrate dev     # create/apply migrations
 npx prisma generate        # regenerate client after schema changes
 npm run keys:generate -- --append   # add a JWT signing key to the set in .env (rotation)
+npm run admin:grant -- <email> [--revoke]   # grant/revoke the admin role (account must exist)
 ```
 
 Config through `src/config/configuration.ts`; required vars validated at boot (`src/config/validate-env.ts`). Redis via `src/cache/cache.service.ts`.
@@ -30,11 +31,12 @@ Config through `src/config/configuration.ts`; required vars validated at boot (`
 - **Access + refresh tokens are RS256 JWTs** (15m / 30d), payload `{ userLoginId, jti }`. This service is the only holder of the private keys; everyone else verifies against `/.well-known/jwks.json`.
 - **Refresh tokens are persisted and rotated**: each refresh token's `jti` (uuidv7) links to a `RefreshToken` row. `handleRefreshToken` (`src/auth/auth.service.ts`) deletes the old row and inserts a new one on every refresh.
 - **Reuse detection as theft detection**: a valid signature over a `jti` with no `RefreshToken` row means the token was already rotated away and is being replayed — that revokes ALL of the user's refresh tokens. Each row still stores `allocatedIp`, but a mismatch only logs a warning and rotates normally: a changed IP is almost always a network handover (notably when an offline client reconnects to flush queued practice), so revoking on it stranded legitimate syncs.
+- **Roles**: `UserLogin.roles` (text[]) is signed into the **access token only** as `roles` (the refresh token never carries it). Login and every refresh re-read it from the DB, so a change lands within one access-token lifetime. `ADMIN_EMAILS` (optional, case-insensitive) adds `admin` at OAuth login and never removes it (`src/auth/roles.ts`). `/profile` also returns `roles`, but that is only for showing UI; services authorize from the token.
 - Logout deletes by `jti` (or all rows with `isLoggedOutFromAllDevices`). Expired rows are swept by a daily cron (`src/auth/refresh-token-cleanup.service.ts`).
 
 ## Data model (`prisma/schema.prisma`)
 
-Three tables, UUID PKs: `UserLogin` (provider identity, the id every other service scopes by), `User` (1:1 profile: gmail, displayName, pictureUrl), `RefreshToken`. OAuth login (`handleOAuthLogin`) upserts UserLogin + User by `providerUserId`.
+Three tables, UUID PKs: `UserLogin` (provider identity, the id every other service scopes by), `User` (1:1 profile: gmail, displayName, pictureUrl), `RefreshToken`. `UserLogin.roles` holds authorization roles. Bump `cacheKeys.userProfile()` whenever the profile payload shape changes. OAuth login (`handleOAuthLogin`) upserts UserLogin + User by `providerUserId`.
 
 ## Conventions
 
