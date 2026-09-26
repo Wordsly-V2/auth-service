@@ -1,3 +1,4 @@
+import { AdminUsersModule } from '@/admin-users/admin-users.module';
 import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
 import { AuthModule } from '@/auth/auth.module';
@@ -35,6 +36,7 @@ import { RequestContextLogger } from './common/request-context-logger';
         AuthModule,
         PrismaModule,
         UsersModule,
+        AdminUsersModule,
         WellKnownModule,
     ],
     controllers: [AppController],

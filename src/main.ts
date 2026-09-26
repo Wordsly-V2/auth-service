@@ -1,3 +1,8 @@
+// Before anything else: decorators read and write design-time type metadata as
+// their modules load, and a DTO that loads ahead of Nest's own import of this
+// polyfill crashes the boot (`@Type`) or silently loses its types (implicit
+// query conversion).
+import 'reflect-metadata';
 import { AppModule } from '@/app.module';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';

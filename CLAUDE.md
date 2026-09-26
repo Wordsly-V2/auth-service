@@ -34,6 +34,10 @@ Config through `src/config/configuration.ts`; required vars validated at boot (`
 - **Roles**: `UserLogin.roles` (text[]) is signed into the **access token only** as `roles` (the refresh token never carries it). Login and every refresh re-read it from the DB, so a change lands within one access-token lifetime. `ADMIN_EMAILS` (optional, case-insensitive) adds `admin` at OAuth login and never removes it (`src/auth/roles.ts`). `/profile` also returns `roles`, but that is only for showing UI; services authorize from the token.
 - Logout deletes by `jti` (or all rows with `isLoggedOutFromAllDevices`). Expired rows are swept by a daily cron (`src/auth/refresh-token-cleanup.service.ts`).
 
+## Admin API (`src/admin-users/`)
+
+`@Roles('admin')` at class level under `/admin/users` (the gateway routes it here): `GET /` (search `q` over email and display name, filters `role`, `status`, paging clamped to 100), `GET stats?from&to` (UTC days, default last 30, max 365: totals, sign-ups per day), `GET :id` (with `lastSeenAt` = newest refresh token, `bootstrapAdmin` = listed in `ADMIN_EMAILS`, so revoking admin is undone at their next login), `PATCH :id/roles {roles}` (only `ASSIGNABLE_ROLES`; other roles are kept), `PATCH :id/status {status}` (`USER_LOGIN_STATUSES` in `src/auth/user-login-status.ts`; suspending deletes every refresh token), `POST :id/sessions/revoke`. Writes run in a serializable transaction (a clash answers 409), refuse changing your own account and removing the last active admin (409, pure rails in `admin-users.logic.ts`), invalidate the cached profile, and log one `admin_action {actor, action, target, …}` line. A suspended user's live access token still works until it expires (at most 15 min); there is no denylist.
+
 ## Data model (`prisma/schema.prisma`)
 
 Three tables, UUID PKs: `UserLogin` (provider identity, the id every other service scopes by), `User` (1:1 profile: gmail, displayName, pictureUrl), `RefreshToken`. `UserLogin.roles` holds authorization roles. Bump `cacheKeys.userProfile()` whenever the profile payload shape changes. OAuth login (`handleOAuthLogin`) upserts UserLogin + User by `providerUserId`.
