@@ -74,7 +74,20 @@ describe('AccessGuard', () => {
             sub: 'user-1',
             sid: 'session-1',
             jti: 'jti-1',
+            // A token minted before the claim existed reads as no roles.
+            roles: [],
         });
+    });
+
+    it('attaches the roles claim, keeping only string entries', async () => {
+        const guard = buildGuard();
+        verify.mockResolvedValue({ ...PAYLOAD, roles: ['admin', 42] });
+        const { context, request } = buildContext({
+            headers: { authorization: 'Bearer good-token' },
+        });
+
+        await guard.canActivate(context);
+        expect(request.user?.roles).toEqual(['admin']);
     });
 
     it('requires the token to be an access token', async () => {

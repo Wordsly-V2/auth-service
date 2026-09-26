@@ -54,9 +54,19 @@ export class AccessGuard implements CanActivate {
             sub: payload.sub,
             sid: payload.sid,
             jti: payload.jti,
+            roles: readRoles(payload.roles),
         };
         return true;
     }
+}
+
+/**
+ * The `roles` claim, keeping only string entries. Tokens minted before the
+ * claim existed have none, which reads as no roles rather than an error.
+ */
+function readRoles(claim: unknown): string[] {
+    if (!Array.isArray(claim)) return [];
+    return claim.filter((role): role is string => typeof role === 'string');
 }
 
 function readBearerToken(request: AuthenticatedRequest): string | null {

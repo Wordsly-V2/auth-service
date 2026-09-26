@@ -1,4 +1,4 @@
-/** The role that unlocks the curriculum admin API (`/admin/path/*`). */
+/** The role behind every `/admin/*` route, in every service. */
 export const ADMIN_ROLE = 'admin';
 
 /**

@@ -8,6 +8,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { hashRefreshToken } from '@/auth/refresh-token-hash';
 import { TokenService } from '@/auth/token.service';
 import { bootstrapRoles, parseAdminEmails } from '@/auth/roles';
+import { ACTIVE_USER_LOGIN_STATUS } from '@/auth/user-login-status';
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Prisma, UserLogin } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
@@ -20,9 +21,6 @@ import ms from 'ms';
  * link; short enough that a stolen copy is almost always caught as reuse.
  */
 export const REFRESH_REUSE_GRACE_MS = 30_000;
-
-/** The only `UserLogin.status` that may sign in; anything else is locked out. */
-export const ACTIVE_USER_LOGIN_STATUS = 'active';
 
 function assertActive(userLogin: Pick<UserLogin, 'status'>): void {
     if (userLogin.status !== ACTIVE_USER_LOGIN_STATUS) {
