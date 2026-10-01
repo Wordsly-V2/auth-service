@@ -83,3 +83,27 @@ model RefreshToken {
   @@index([expiresAt])
   @@map("refresh_tokens")
 }
+
+/// Transactional outbox: events written in the same transaction as the change
+/// they announce, then published to Kafka by `OutboxRelayService`. A row with
+/// no `publishedAt` is still owed to Kafka; one that is down or not configured
+/// only delays it. `topic` is free text (no enum); `payload` is the message body.
+model OutboxMessage {
+  id      String  @id @db.Uuid
+  topic   String
+  /// Kafka message key (keeps one user's events on one partition, in order).
+  key     String?
+  payload Json
+
+  /// Tries so far, and the last failure, for a stuck row to be found by hand.
+  attempts  Int     @default(0)
+  lastError String? @map("last_error")
+  /// Not before this time: a claim leases the row until then, a failure backs off.
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([publishedAt, nextAttemptAt])
+  @@map("outbox_messages")
+}

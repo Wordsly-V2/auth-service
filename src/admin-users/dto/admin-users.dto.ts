@@ -114,3 +114,16 @@ export interface AdminUserStats {
     /** Sign-ups per UTC day, one point per day of the range. */
     signups: { date: string; count: number }[];
 }
+
+/** `DELETE /admin/users/:id`. */
+export interface AdminUserDeleted {
+    userLoginId: string;
+    deletedAt: string;
+    sessionsEnded: number;
+    /**
+     * `user_deleted` reached Kafka within the request, so the other services
+     * are clearing the user's data now. False when Kafka is down or not
+     * configured: the event waits in the outbox and goes out once it is back.
+     */
+    eventPublished: boolean;
+}
