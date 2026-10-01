@@ -1,4 +1,5 @@
 import {
+    AdminUserDeleted,
     AdminUserDetail,
     AdminUserList,
     AdminUserStats,
@@ -14,6 +15,7 @@ import { CurrentUser } from '@/common/guard/current-user.decorator';
 import {
     Body,
     Controller,
+    Delete,
     Get,
     HttpCode,
     Param,
@@ -76,5 +78,18 @@ export class AdminUsersController {
         @Param('id', ParseUUIDPipe) id: string,
     ): Promise<{ sessionsEnded: number }> {
         return this.adminUsers.revokeSessions(actorId, id);
+    }
+
+    /**
+     * Delete the account for good. Other services drop the user's data when
+     * `user_deleted` reaches them (through the outbox, so a Kafka outage only
+     * delays it).
+     */
+    @Delete(':id')
+    deleteAccount(
+        @CurrentUser() actorId: string,
+        @Param('id', ParseUUIDPipe) id: string,
+    ): Promise<AdminUserDeleted> {
+        return this.adminUsers.deleteAccount(actorId, id);
     }
 }

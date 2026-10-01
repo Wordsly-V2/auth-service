@@ -78,4 +78,12 @@ export default () => ({
     // Comma-separated addresses granted the admin role when they sign in.
     // Optional; only ever adds the role (see src/auth/roles.ts).
     adminEmails: process.env.ADMIN_EMAILS ?? '',
+    // Optional. Events go through the outbox (src/messaging/), so with no
+    // brokers they wait in `outbox_messages` instead of being lost.
+    kafka: {
+        brokers: process.env.KAFKA_BROKERS ?? '',
+        ca: process.env.KAFKA_CA ?? '',
+        cert: process.env.KAFKA_CERT ?? '',
+        key: process.env.KAFKA_KEY ?? '',
+    },
 });

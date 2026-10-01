@@ -1,4 +1,5 @@
 import {
+    AdminUserDeleted,
     AdminUserDetail,
     AdminUserList,
     AdminUserStats,
@@ -22,6 +23,12 @@ import {
 } from '@/auth/user-login-status';
 import { ADMIN_ROLE, parseAdminEmails } from '@/auth/roles';
 import { CacheService } from '@/cache/cache.service';
+import {
+    USER_DELETED_TOPIC,
+    type UserDeletedEvent,
+} from '@/messaging/constants';
+import { OutboxRelayService } from '@/messaging/outbox-relay.service';
+import { OutboxService } from '@/messaging/outbox.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import {
     BadRequestException,
@@ -34,6 +41,9 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
 type Tx = Prisma.TransactionClient;
+
+/** How long a delete waits for its `user_deleted` to reach Kafka before answering. */
+const PUBLISH_WAIT_MS = 3000;
 
 /** A `UserLogin` with what the admin views need, as one Prisma include. */
 const loginInclude = (now: Date) =>
@@ -74,6 +84,8 @@ export class AdminUsersService {
         private readonly prisma: PrismaService,
         private readonly cache: CacheService,
         private readonly config: ConfigService,
+        private readonly outbox: OutboxService,
+        private readonly relay: OutboxRelayService,
     ) {}
 
     async list(query: ListUsersQueryDto): Promise<AdminUserList> {
@@ -251,6 +263,61 @@ export class AdminUsersService {
             },
         );
         return { sessionsEnded: result.sessionsEnded };
+    }
+
+    /**
+     * Hard-delete an account. The `user_deleted` event is written to the
+     * outbox in the same transaction as the delete, so the other services are
+     * always told, even when Kafka is down at this moment: the relay publishes
+     * it as soon as the broker is reachable, and they delete everything they
+     * hold for the user. Same rails as the other writes (not yourself, not the
+     * last active admin).
+     *
+     * A live access token keeps working until it expires (at most 15 min); a
+     * write it makes after the other services purged can leave a stray row,
+     * which the orphan check in docs/tools finds.
+     */
+    async deleteAccount(
+        actorId: string,
+        targetId: string,
+    ): Promise<AdminUserDeleted> {
+        const deletedAt = new Date().toISOString();
+        let eventId = '';
+        const { sessionsEnded } = await this.write(
+            actorId,
+            targetId,
+            'delete_account',
+            async (tx, target) => {
+                this.assertAllowed(actorId, target, {
+                    removesAdmin: true,
+                    admins: await this.countActiveAdmins(tx),
+                });
+                const event: UserDeletedEvent = {
+                    userLoginId: targetId,
+                    deletedAt,
+                };
+                eventId = await this.outbox.enqueue(
+                    tx,
+                    USER_DELETED_TOPIC,
+                    { ...event },
+                    targetId,
+                );
+                const sessions = await tx.refreshToken.deleteMany({
+                    where: { userLoginId: targetId },
+                });
+                await tx.user.deleteMany({ where: { userLoginId: targetId } });
+                await tx.userLogin.delete({ where: { id: targetId } });
+                return { sessionsEnded: sessions.count, eventId };
+            },
+        );
+
+        await this.relay.flush(PUBLISH_WAIT_MS);
+        return {
+            userLoginId: targetId,
+            deletedAt,
+            sessionsEnded,
+            eventPublished: await this.relay.isPublished(eventId),
+        };
     }
 
     /**
