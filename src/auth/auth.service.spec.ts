@@ -8,7 +8,7 @@ import { UnauthorizedException } from '@nestjs/common';
 
 /**
  * Covers the theft-detection branches of `handleRefreshToken`:
- * a token replayed after the grace window burns the whole token family, one
+ * a token replayed after the grace window burns its token family (the session), one
  * replayed inside it (another tab, a retry after a lost response) gets a fresh
  * pair, and a refresh from a new IP only warns and rotates — the latter is what
  * lets a client that was offline reconnect on a different network and flush its
@@ -122,7 +122,7 @@ describe('AuthService.handleRefreshToken', () => {
         expect(tokenService.verify).toHaveBeenCalledWith(PRESENTED, 'refresh');
     });
 
-    it('revokes every refresh token, outside the transaction, when an unknown jti is replayed', async () => {
+    it('revokes the session, outside the transaction, when an unknown jti is replayed', async () => {
         transaction.refreshToken.findUnique.mockResolvedValue(null);
 
         await expect(refresh()).rejects.toBeInstanceOf(UnauthorizedException);
@@ -130,12 +130,12 @@ describe('AuthService.handleRefreshToken', () => {
         // Revoking inside the transaction and then throwing would roll the
         // revocation back, so it must happen on the non-transactional client.
         expect(outside.refreshToken.deleteMany).toHaveBeenCalledWith({
-            where: { userLoginId: USER_LOGIN_ID },
+            where: { userLoginId: USER_LOGIN_ID, sessionId: SESSION_ID },
         });
         expect(transaction.refreshToken.create).not.toHaveBeenCalled();
     });
 
-    it('revokes every refresh token when a token rotated past the grace window is replayed', async () => {
+    it('revokes the session when a token rotated past the grace window is replayed', async () => {
         transaction.refreshToken.findUnique.mockResolvedValue(
             row({
                 rotatedAt: new Date(Date.now() - REFRESH_REUSE_GRACE_MS - 1000),
@@ -145,9 +145,20 @@ describe('AuthService.handleRefreshToken', () => {
         await expect(refresh()).rejects.toBeInstanceOf(UnauthorizedException);
 
         expect(outside.refreshToken.deleteMany).toHaveBeenCalledWith({
-            where: { userLoginId: USER_LOGIN_ID },
+            where: { userLoginId: USER_LOGIN_ID, sessionId: SESSION_ID },
         });
         expect(transaction.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('revokes every session for a replayed token minted before sessions existed', async () => {
+        tokenService.verify.mockResolvedValue({ ...payload(), sid: undefined });
+        transaction.refreshToken.findUnique.mockResolvedValue(null);
+
+        await expect(refresh()).rejects.toBeInstanceOf(UnauthorizedException);
+
+        expect(outside.refreshToken.deleteMany).toHaveBeenCalledWith({
+            where: { userLoginId: USER_LOGIN_ID },
+        });
     });
 
     it('issues a fresh pair when a token rotated moments ago is presented again', async () => {
@@ -256,7 +267,7 @@ describe('AuthService.handleRefreshToken', () => {
         await expect(refresh()).rejects.toBeInstanceOf(UnauthorizedException);
 
         expect(outside.refreshToken.deleteMany).toHaveBeenCalledWith({
-            where: { userLoginId: USER_LOGIN_ID },
+            where: { userLoginId: USER_LOGIN_ID, sessionId: SESSION_ID },
         });
     });
 
