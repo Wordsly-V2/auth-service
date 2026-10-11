@@ -339,12 +339,18 @@ export class AuthService {
             this.logger.warn('Refresh token reuse detected', {
                 jti: jwtPayload.jti,
                 userLoginId: jwtPayload.sub,
+                sessionId: jwtPayload.sid,
             });
-            // Burn every session for the user and force a fresh login.
+            // Burn the token family -- the session the replayed token belongs to --
+            // and force that device to log in again. A stolen copy shares the
+            // victim's session, so this ends the thief's access too. It used to
+            // burn every session for the user, which signed out all of a learner's
+            // other devices whenever one of them resent a stale token (a refresh
+            // whose response was lost on a flaky mobile link is enough).
             await this.prismaService.refreshToken.deleteMany({
-                where: {
-                    userLoginId: jwtPayload.sub,
-                },
+                where: jwtPayload.sid
+                    ? { userLoginId: jwtPayload.sub, sessionId: jwtPayload.sid }
+                    : { userLoginId: jwtPayload.sub },
             });
             throw new UnauthorizedException('Refresh token not found');
         }
